@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import GoogleAuthButton from '../components/GoogleAuthButton';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -61,13 +62,21 @@ const LoginPage = () => {
                 className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               />
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white"
-            >
-              {loading ? 'Logging in...' : 'Log In'}
-            </button>
+            <div className="space-y-3">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+              >
+                {loading ? 'Logging in...' : 'Log In'}
+              </button>
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-400">
+                <span className="h-px flex-1 bg-slate-200" />
+                or
+                <span className="h-px flex-1 bg-slate-200" />
+              </div>
+              <GoogleAuthButton label="Sign in with Google" />
+            </div>
           </form>
           <div className="mt-4 text-sm text-slate-600">
             Don’t have an account?{' '}

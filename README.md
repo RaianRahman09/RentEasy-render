@@ -29,9 +29,14 @@ cp server/.env.example server/.env
 Key settings:
 - `MONGO_URI` – your MongoDB connection string
 - `JWT_SECRET`, `JWT_REFRESH_SECRET` – auth secrets
+- `GOOGLE_CLIENT_ID` – OAuth client (Web) ID for Google login
 - `CLOUDINARY_*` – Cloudinary creds (if using uploads)
 - `CLIENT_URL` – typically `http://localhost:5173`
 - `PORT` – backend port (default 5001)
+
+Copy `client/.env.example` to `client/.env` and set:
+- `VITE_API_BASE` – API base (defaults to `http://localhost:5001/api`)
+- `VITE_GOOGLE_CLIENT_ID` – same OAuth client ID as above for Google buttons
 
 ## 3) Run the backend
 ```bash

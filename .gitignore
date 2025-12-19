@@ -1,0 +1,25 @@
+# dependencies
+**/node_modules
+
+# environment variables / secrets
+**/.env
+**/.env.*
+
+# builds
+**/dist
+**/build
+
+# logs
+*.log
+
+# OS / editor junk
+.DS_Store
+.vscode/
+.idea/
+
+# allow env template
+!.env.example
+
+# test coverage
+coverage/
+

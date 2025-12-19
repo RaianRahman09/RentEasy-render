@@ -133,6 +133,11 @@ exports.googleAuth = async (req, res) => {
         avatarUrl: googleProfile?.picture,
       });
     } else {
+      if (role && user.role !== role) {
+        return res.status(409).json({
+          message: `Account already exists as a ${user.role}. Please log in with that role.`,
+        });
+      }
       if (!user.googleId) user.googleId = googleId;
       if (!user.avatarUrl && googleProfile?.picture) user.avatarUrl = googleProfile.picture;
     }

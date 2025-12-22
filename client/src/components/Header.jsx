@@ -3,16 +3,18 @@ import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const navLinkClass = ({ isActive }) =>
-  `text-sm font-medium ${isActive ? 'text-blue-700' : 'text-slate-700 hover:text-blue-700'}`;
+  `text-sm font-medium transition-colors ${
+    isActive ? 'text-[var(--primary)]' : 'text-[var(--muted)] hover:text-[var(--primary)]'
+  }`;
 
 const Header = () => {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-white shadow-sm">
+    <header className="border-b border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2 text-lg font-semibold text-blue-700">
-          <span className="rounded-lg bg-blue-100 px-2 py-1">🏠</span>
+        <Link to="/" className="flex items-center gap-2 text-lg font-semibold text-[var(--primary)]">
+          <span className="rounded-lg bg-[var(--surface-2)] px-2 py-1">🏠</span>
           RentEasy
         </Link>
         <nav className="hidden items-center gap-6 md:flex">
@@ -34,13 +36,13 @@ const Header = () => {
             <>
               <Link
                 to="/auth/login"
-                className="rounded-full border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700"
+                className="rounded-full border border-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary)] hover:bg-[var(--surface-2)]"
               >
                 Login
               </Link>
               <Link
                 to="/auth/signup"
-                className="rounded-full bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-full bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] hover:brightness-110 active:brightness-95"
               >
                 Sign Up
               </Link>
@@ -49,30 +51,42 @@ const Header = () => {
           {user && (
             <div className="flex items-center gap-3">
               {user.role === 'tenant' && (
-                <Link to="/dashboard/tenant" className="text-sm font-medium text-slate-700">
+                <Link
+                  to="/dashboard/tenant"
+                  className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]"
+                >
                   Tenant Dashboard
                 </Link>
               )}
               {user.role === 'landlord' && (
-                <Link to="/dashboard/landlord" className="text-sm font-medium text-slate-700">
+                <Link
+                  to="/dashboard/landlord"
+                  className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]"
+                >
                   Landlord Dashboard
                 </Link>
               )}
               {user.role === 'admin' && (
-                <Link to="/dashboard/admin" className="text-sm font-medium text-slate-700">
+                <Link
+                  to="/dashboard/admin"
+                  className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]"
+                >
                   Admin Dashboard
                 </Link>
               )}
               {user.role !== 'admin' ? (
-                <Link to="/me/profile" className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <Link
+                  to="/me/profile"
+                  className="flex items-center gap-2 text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]"
+                >
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--primary)]">
                     {user.name?.slice(0, 1)?.toUpperCase() || 'U'}
                   </span>
                   {user.name}
                 </Link>
               ) : (
-                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <div className="flex items-center gap-2 text-sm font-medium text-[var(--muted)]">
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--primary)]">
                     {user.name?.slice(0, 1)?.toUpperCase() || 'A'}
                   </span>
                   {user.name}
@@ -80,7 +94,7 @@ const Header = () => {
               )}
               <button
                 onClick={logout}
-                className="rounded-full border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600"
+                className="rounded-full border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:border-[var(--primary)] hover:text-[var(--text)]"
               >
                 Logout
               </button>

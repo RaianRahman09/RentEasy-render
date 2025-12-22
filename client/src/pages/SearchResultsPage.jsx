@@ -74,36 +74,36 @@ const SearchResultsPage = () => {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-bold text-slate-900">Search Results</h1>
+      <h1 className="text-3xl font-bold text-[var(--text)]">Search Results</h1>
       <form
         onSubmit={onSubmit}
-        className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-6"
+        className="mt-4 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-6"
       >
         <input
           type="text"
           value={filters.title}
           onChange={(e) => setFilters((f) => ({ ...f, title: e.target.value }))}
           placeholder="Title keywords"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <input
           type="text"
           value={filters.location}
           onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
           placeholder="Location"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <input
           type="number"
           value={filters.maxRent}
           onChange={(e) => setFilters((f) => ({ ...f, maxRent: e.target.value }))}
           placeholder="Max Rent"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <select
           value={filters.roomType}
           onChange={(e) => setFilters((f) => ({ ...f, roomType: e.target.value }))}
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none"
         >
           <option value="">Room Type</option>
           <option value="Entire Place">Entire Place</option>
@@ -111,7 +111,10 @@ const SearchResultsPage = () => {
           <option value="Studio">Studio</option>
           <option value="Shared">Shared</option>
         </select>
-        <button type="submit" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+        <button
+          type="submit"
+          className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] hover:brightness-110 active:brightness-95"
+        >
           Search
         </button>
         {user?.role === 'tenant' && (
@@ -119,7 +122,7 @@ const SearchResultsPage = () => {
             type="button"
             onClick={onSaveFilter}
             disabled={saving}
-            className="rounded-lg border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-lg border border-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--primary)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saving ? 'Saving...' : 'Save Filter'}
           </button>
@@ -128,7 +131,7 @@ const SearchResultsPage = () => {
       {saveMsg && (
         <div
           className={`mt-2 text-sm font-semibold ${
-            saveStatus === 'error' ? 'text-red-700' : 'text-green-700'
+            saveStatus === 'error' ? 'text-[var(--danger)]' : 'text-[var(--primary)]'
           }`}
         >
           {saveMsg}
@@ -137,9 +140,12 @@ const SearchResultsPage = () => {
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         {results.map((l) => (
-          <div key={l._id} className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div
+            key={l._id}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]"
+          >
             <div className="flex flex-col gap-3 p-4 md:flex-row">
-              <div className="h-32 w-full rounded-lg bg-slate-200 md:w-40">
+              <div className="h-32 w-full rounded-lg bg-[var(--surface-2)] md:w-40">
                 <img
                   src={
                     l.photos?.[0] ||
@@ -152,25 +158,25 @@ const SearchResultsPage = () => {
               <div className="flex-1">
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="text-lg font-semibold text-slate-900">{l.title}</div>
-                    <div className="text-sm text-slate-600">{l.address}</div>
+                    <div className="text-lg font-semibold text-[var(--text)]">{l.title}</div>
+                    <div className="text-sm text-[var(--muted)]">{l.address}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-lg font-bold text-blue-700">${l.rent}/mo</div>
-                    <div className="text-xs text-slate-500 capitalize">{l.status}</div>
+                    <div className="text-lg font-bold text-[var(--primary)]">${l.rent}/mo</div>
+                    <div className="text-xs capitalize text-[var(--muted)]">{l.status}</div>
                   </div>
                 </div>
-                <div className="mt-2 text-sm text-slate-600">
+                <div className="mt-2 text-sm text-[var(--muted)]">
                   {l.explanation || 'Within your filters and budget.'}
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-600">
-                  <span className="rounded-full bg-slate-100 px-2 py-1">{l.beds} Beds</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-1">{l.baths} Baths</span>
-                  <span className="rounded-full bg-slate-100 px-2 py-1">{l.roomType}</span>
+                <div className="mt-3 flex items-center gap-2 text-xs text-[var(--muted)]">
+                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.beds} Beds</span>
+                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.baths} Baths</span>
+                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.roomType}</span>
                 </div>
                 <button
                   onClick={() => navigate(`/listing/${l._id}`)}
-                  className="mt-3 inline-block rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white"
+                  className="mt-3 inline-block rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-[var(--on-primary)] hover:brightness-110 active:brightness-95"
                 >
                   View Details
                 </button>
@@ -179,7 +185,7 @@ const SearchResultsPage = () => {
           </div>
         ))}
         {!results.length && (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+          <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-6 text-sm text-[var(--muted)]">
             No listings found. Adjust filters and search again.
           </div>
         )}

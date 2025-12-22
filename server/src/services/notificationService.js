@@ -1,5 +1,6 @@
 const SavedFilter = require('../models/SavedFilter');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { sendMail } = require('../utils/mailer');
 
 const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
@@ -75,4 +76,29 @@ const notifyTenantsForListing = async (listing) => {
   );
 };
 
-module.exports = { notifyTenantsForListing };
+const createNotification = async ({ userId, actorId, type, title, body, link, metadata } = {}) => {
+  const missing = [];
+  if (!userId) missing.push('userId');
+  if (!type) missing.push('type');
+  if (!title) missing.push('title');
+  if (!link) missing.push('link');
+  if (missing.length) {
+    const err = new Error(`Missing required fields: ${missing.join(', ')}`);
+    err.status = 400;
+    throw err;
+  }
+
+  const notification = await Notification.create({
+    userId,
+    actorId,
+    type,
+    title,
+    body,
+    link,
+    metadata,
+  });
+
+  return notification;
+};
+
+module.exports = { notifyTenantsForListing, createNotification };

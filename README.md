@@ -33,10 +33,13 @@ Key settings:
 - `CLOUDINARY_*` – Cloudinary creds (if using uploads)
 - `CLIENT_URL` – typically `http://localhost:5173`
 - `PORT` – backend port (default 5001)
+- `NOMINATIM_BASE_URL` – optional override for OpenStreetMap geocoding
+- `NOMINATIM_EMAIL` – optional contact email for Nominatim requests
 
 Copy `client/.env.example` to `client/.env` and set:
 - `VITE_API_BASE` – API base (defaults to `http://localhost:5001/api`)
 - `VITE_GOOGLE_CLIENT_ID` – same OAuth client ID as above for Google buttons
+- `VITE_NOMINATIM_BASE_URL` – optional override for frontend geocoding (defaults to public Nominatim)
 
 ## 3) Run the backend
 ```bash
@@ -57,6 +60,11 @@ Frontend runs at `http://localhost:5173` (Vite dev server).
 ## 5) Verify
 - Open the frontend URL in a browser.
 - Backend should log “listening on PORT” with successful Mongo connection.
+
+## Map + Geocoding (Learning Project)
+- Uses OpenStreetMap tiles with Leaflet (`react-leaflet` + `leaflet`). No paid API keys required.
+- Backend location search uses OpenStreetMap Nominatim geocoding (`/api/listings/search`).
+- Landlord listing form uses Nominatim for address lookup and supports manual lat/lng input for offline testing.
 
 ## Common adjustments
 - If ports conflict, update `server/.env` `PORT` and `client` API base URL (see `client/src/api/axios.js`).

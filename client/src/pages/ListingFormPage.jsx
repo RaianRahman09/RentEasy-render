@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
+import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 const defaultState = {
   title: '',
@@ -14,6 +15,26 @@ const defaultState = {
   status: 'active',
 };
 
+const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
+
+const MapClickHandler = ({ onSelect }) => {
+  useMapEvents({
+    click: (event) => {
+      onSelect?.(event.latlng);
+    },
+  });
+  return null;
+};
+
+const MapRecenter = ({ center }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!center?.lat || !center?.lng) return;
+    map.setView([center.lat, center.lng], map.getZoom(), { animate: true });
+  }, [center, map]);
+  return null;
+};
+
 const ListingFormPage = () => {
   const { id } = useParams();
   const isEdit = Boolean(id);
@@ -23,11 +44,18 @@ const ListingFormPage = () => {
   const [existingPhotos, setExistingPhotos] = useState([]);
   const [newPhotos, setNewPhotos] = useState([]);
   const [error, setError] = useState('');
+  const [coordinates, setCoordinates] = useState(null);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [locationMessage, setLocationMessage] = useState('');
+  const [locationStatus, setLocationStatus] = useState('');
+  const [geocoding, setGeocoding] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       if (!isEdit) return;
-      const res = await api.get(`/listings/${id}`);
+      const res = await api.get(`/listings/${id}/owner`);
       const l = res.data.listing;
       setForm({
         title: l.title,
@@ -41,6 +69,13 @@ const ListingFormPage = () => {
         status: l.status,
       });
       setExistingPhotos(l.photos || []);
+      if (l.location?.coordinates?.length === 2) {
+        const [lng, lat] = l.location.coordinates;
+        setCoordinates({ lat, lng });
+        setMapCenter({ lat, lng });
+        setManualLat(String(lat));
+        setManualLng(String(lng));
+      }
     };
     load();
   }, [id, isEdit]);
@@ -54,9 +89,90 @@ const ListingFormPage = () => {
     [newPhotos]
   );
 
+  useEffect(() => {
+    if (!coordinates) return;
+    setManualLat(String(coordinates.lat));
+    setManualLng(String(coordinates.lng));
+  }, [coordinates]);
+
+  const isValidLatLng = (lat, lng) =>
+    Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
+  const applyCoordinates = (lat, lng, message = '') => {
+    if (!isValidLatLng(lat, lng)) {
+      setLocationMessage('Please enter valid latitude and longitude values.');
+      setLocationStatus('error');
+      return;
+    }
+    setCoordinates({ lat, lng });
+    setMapCenter({ lat, lng });
+    if (message) {
+      setLocationMessage(message);
+      setLocationStatus('success');
+    } else {
+      setLocationMessage('');
+      setLocationStatus('');
+    }
+  };
+
+  const onGeocode = async () => {
+    if (!form.address.trim()) {
+      setLocationMessage('Enter an address or area name to search.');
+      setLocationStatus('error');
+      return;
+    }
+    setGeocoding(true);
+    setLocationMessage('');
+    setLocationStatus('');
+    try {
+      const baseUrl = import.meta.env.VITE_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+      const url = new URL('/search', baseUrl);
+      url.searchParams.set('q', form.address.trim());
+      url.searchParams.set('format', 'json');
+      url.searchParams.set('limit', '1');
+
+      // Learning-only: OpenStreetMap Nominatim geocoding for map previews (no paid API keys required).
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      if (!Array.isArray(data) || !data.length) {
+        setLocationMessage('No results found for that address.');
+        setLocationStatus('error');
+        return;
+      }
+      const lat = Number(data[0].lat);
+      const lng = Number(data[0].lon);
+      applyCoordinates(lat, lng, 'Location pinned from OpenStreetMap.');
+    } catch (err) {
+      console.error(err);
+      setLocationMessage('Failed to reach the geocoding service. Try manual coordinates.');
+      setLocationStatus('error');
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const onManualLatChange = (value) => {
+    setManualLat(value);
+    const lat = Number(value);
+    const lng = Number(manualLng);
+    if (isValidLatLng(lat, lng)) applyCoordinates(lat, lng);
+  };
+
+  const onManualLngChange = (value) => {
+    setManualLng(value);
+    const lat = Number(manualLat);
+    const lng = Number(value);
+    if (isValidLatLng(lat, lng)) applyCoordinates(lat, lng);
+  };
+
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    if (!coordinates || !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng))) {
+      setError('Please select a valid map location before saving.');
+      setLoading(false);
+      return;
+    }
     const payload = new FormData();
     payload.append('title', form.title);
     payload.append('description', form.description);
@@ -67,6 +183,8 @@ const ListingFormPage = () => {
     payload.append('baths', form.baths);
     payload.append('amenities', form.amenities);
     payload.append('status', form.status);
+    payload.append('lat', coordinates.lat);
+    payload.append('lng', coordinates.lng);
     existingPhotos.forEach((url) => payload.append('existingPhotos', url));
     newPhotos.forEach((p) => payload.append('photos', p.file));
     try {
@@ -194,6 +312,86 @@ const ListingFormPage = () => {
               />
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-700">Map Location</div>
+              <div className="text-xs text-slate-500">
+                Search an address or drop the pin to set the exact location.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onGeocode}
+              disabled={geocoding}
+              className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {geocoding ? 'Searching...' : 'Search Address on Map'}
+            </button>
+          </div>
+
+          <div className="mt-4 h-64 overflow-hidden rounded-lg border border-slate-200">
+            <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={13} className="h-full w-full">
+              <MapRecenter center={mapCenter} />
+              <MapClickHandler
+                onSelect={(latlng) => {
+                  applyCoordinates(latlng.lat, latlng.lng);
+                }}
+              />
+              {/* Learning-only map: OpenStreetMap + Leaflet (no paid API keys required). */}
+              <TileLayer
+                attribution="&copy; OpenStreetMap contributors"
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {coordinates && (
+                <Marker
+                  position={[coordinates.lat, coordinates.lng]}
+                  draggable
+                  eventHandlers={{
+                    dragend: (event) => {
+                      const { lat, lng } = event.target.getLatLng();
+                      applyCoordinates(lat, lng);
+                    },
+                  }}
+                />
+              )}
+            </MapContainer>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Latitude (optional)</label>
+              <input
+                type="number"
+                value={manualLat}
+                onChange={(e) => onManualLatChange(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. 23.8103"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-600">Longitude (optional)</label>
+              <input
+                type="number"
+                value={manualLng}
+                onChange={(e) => onManualLngChange(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. 90.4125"
+              />
+            </div>
+          </div>
+
+          {locationMessage && (
+            <div
+              className={`mt-3 text-sm font-semibold ${
+                locationStatus === 'error' ? 'text-red-600' : 'text-green-600'
+              }`}
+            >
+              {locationMessage}
+            </div>
+          )}
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div>

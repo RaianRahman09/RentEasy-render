@@ -7,13 +7,22 @@ const ListingSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     rent: { type: Number, required: true },
     address: { type: String, required: true },
-    coordinates: {
-      type: { type: String, enum: ['Point'] },
+    location: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
       coordinates: {
         type: [Number],
+        required: true,
         validate: {
-          validator: (val) => !val || (Array.isArray(val) && val.length === 2),
-          message: 'Coordinates must be [lng, lat]',
+          validator: (val) =>
+            Array.isArray(val) &&
+            val.length === 2 &&
+            Number.isFinite(val[0]) &&
+            Number.isFinite(val[1]) &&
+            val[0] >= -180 &&
+            val[0] <= 180 &&
+            val[1] >= -90 &&
+            val[1] <= 90,
+          message: 'Coordinates must be [lng, lat] with valid ranges',
         },
       },
     },
@@ -28,6 +37,6 @@ const ListingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-ListingSchema.index({ coordinates: '2dsphere' });
+ListingSchema.index({ location: '2dsphere' });
 
 module.exports = mongoose.model('Listing', ListingSchema);

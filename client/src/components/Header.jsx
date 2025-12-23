@@ -22,8 +22,8 @@ const Header = () => {
           <NavLink to="/" className={navLinkClass}>
             Home
           </NavLink>
-          <NavLink to="/search" className={navLinkClass}>
-            Browse Listings
+          <NavLink to="/find" className={navLinkClass}>
+            Find Properties
           </NavLink>
           <NavLink to="/how-it-works" className={navLinkClass}>
             How It Works

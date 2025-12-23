@@ -46,6 +46,10 @@ const seedLandlordSample = async () => {
       photos: [],
       status: 'active',
       featured: true,
+      location: {
+        type: 'Point',
+        coordinates: [-73.9712, 40.7831],
+      },
     },
     {
       title: 'Cozy Studio Near Park',
@@ -59,6 +63,10 @@ const seedLandlordSample = async () => {
       photos: [],
       status: 'active',
       featured: true,
+      location: {
+        type: 'Point',
+        coordinates: [-73.9442, 40.6782],
+      },
     },
   ];
   await Listing.insertMany(demoListings.map((d) => ({ ...d, owner: landlord._id })));

@@ -9,10 +9,9 @@ const {
 
 const router = express.Router();
 
-router.use(auth, requireRole('tenant'));
-router.get('/filters', getSavedFilters);
-router.post('/filters', createSavedFilter);
-router.put('/filters/:id', updateSavedFilter);
-router.delete('/filters/:id', deleteSavedFilter);
+router.get('/filters', auth, requireRole('tenant'), getSavedFilters);
+router.post('/filters', auth, requireRole('tenant'), createSavedFilter);
+router.put('/filters/:id', auth, requireRole('tenant'), updateSavedFilter);
+router.delete('/filters/:id', auth, requireRole('tenant'), deleteSavedFilter);
 
 module.exports = router;

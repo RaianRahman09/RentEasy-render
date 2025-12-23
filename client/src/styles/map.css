@@ -1,0 +1,44 @@
+.leaflet-container {
+  font-family: inherit;
+}
+
+.price-marker-wrapper {
+  background: transparent;
+  border: none;
+}
+
+.map-price-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.2);
+  border: 2px solid var(--surface);
+  white-space: nowrap;
+}
+
+.map-price-marker.is-active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.listing-popup .leaflet-popup-content-wrapper {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.listing-popup .leaflet-popup-content {
+  margin: 12px;
+}
+
+.listing-popup .leaflet-popup-tip {
+  background: var(--surface);
+}

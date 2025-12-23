@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 import './styles/theme.css';
+import 'leaflet/dist/leaflet.css';
+import './styles/map.css';
+import './utils/leafletIcons';
 import App from './App.jsx';
 import { applyTheme, getInitialTheme } from './theme/theme';
 

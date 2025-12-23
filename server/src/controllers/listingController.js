@@ -20,6 +20,14 @@ const toArray = (value) => {
   return [];
 };
 
+const DEFAULT_SEARCH_RADIUS_KM = 8;
+const DEFAULT_MAP_CENTER = { lat: 23.8103, lng: 90.4125 };
+
+const toNumber = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
 const buildFilters = (body = {}) => {
   const { location, minRent, maxRent, roomType, amenities, status, title } = body;
   const filter = {};
@@ -37,10 +45,134 @@ const buildFilters = (body = {}) => {
   return filter;
 };
 
+const parseCoordinates = (payload = {}) => {
+  const lat = toNumber(payload.lat ?? payload.latitude);
+  const lng = toNumber(payload.lng ?? payload.longitude);
+  if (lat === null || lng === null) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  return [lng, lat];
+};
+
+const hashSeed = (value) => {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = (hash << 5) - hash + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const seededRandom = (seed) => {
+  const x = Math.sin(seed) * 10000;
+  return x - Math.floor(x);
+};
+
+const metersToDegreesLat = (meters) => meters / 111320;
+
+const metersToDegreesLng = (meters, lat) => meters / (111320 * Math.cos((lat * Math.PI) / 180));
+
+// Privacy helper: offset coordinates ~100-300m for public search results.
+const obfuscateCoordinates = (coordinates, seedValue) => {
+  if (!coordinates || coordinates.length !== 2) return null;
+  const [lng, lat] = coordinates;
+  const seed = hashSeed(seedValue || `${lng},${lat}`);
+  const distance = 100 + seededRandom(seed) * 200;
+  const angle = seededRandom(seed + 1) * Math.PI * 2;
+  const offsetLat = metersToDegreesLat(distance * Math.cos(angle));
+  const offsetLng = metersToDegreesLng(distance * Math.sin(angle), lat);
+  return [lng + offsetLng, lat + offsetLat];
+};
+
+const centerFromListings = (listings = []) => {
+  const coords = listings
+    .map((listing) => listing.location?.coordinates)
+    .filter((coord) => Array.isArray(coord) && coord.length === 2);
+  if (!coords.length) return DEFAULT_MAP_CENTER;
+  const sums = coords.reduce(
+    (acc, [lng, lat]) => ({ lng: acc.lng + lng, lat: acc.lat + lat }),
+    { lng: 0, lat: 0 }
+  );
+  return { lng: sums.lng / coords.length, lat: sums.lat / coords.length };
+};
+
+const boundsFromCenter = (center, radiusKm = DEFAULT_SEARCH_RADIUS_KM) => {
+  const radiusMeters = radiusKm * 1000;
+  const latOffset = metersToDegreesLat(radiusMeters);
+  const lngOffset = metersToDegreesLng(radiusMeters, center.lat);
+  return {
+    ne: { lat: center.lat + latOffset, lng: center.lng + lngOffset },
+    sw: { lat: center.lat - latOffset, lng: center.lng - lngOffset },
+  };
+};
+
+const toPublicListing = (listing) => {
+  const obfuscated = obfuscateCoordinates(listing.location?.coordinates, listing._id?.toString() || '');
+  return {
+    _id: listing._id,
+    title: listing.title,
+    address: listing.address,
+    rent: listing.rent,
+    roomType: listing.roomType,
+    beds: listing.beds,
+    baths: listing.baths,
+    photos: listing.photos,
+    status: listing.status,
+    mapLocation: obfuscated
+      ? {
+          type: 'Point',
+          coordinates: obfuscated,
+        }
+      : null,
+  };
+};
+
+const geocodeLocationText = async (locationText) => {
+  if (!locationText) return null;
+  const baseUrl = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
+  const url = new URL('/search', baseUrl);
+  url.searchParams.set('q', locationText);
+  url.searchParams.set('format', 'json');
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('addressdetails', '0');
+  const email = process.env.NOMINATIM_EMAIL;
+  if (email) url.searchParams.set('email', email);
+
+  // Learning-only: free geocoding via OpenStreetMap Nominatim (no paid API keys required).
+  const response = await fetch(url.toString(), {
+    headers: {
+      'User-Agent': 'RentEasy (learning project)',
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Geocoding failed with status ${response.status}`);
+  }
+  const data = await response.json();
+  if (!Array.isArray(data) || !data.length) return null;
+  const result = data[0];
+  const lat = toNumber(result.lat);
+  const lng = toNumber(result.lon);
+  if (lat === null || lng === null) return null;
+  let bounds = null;
+  if (Array.isArray(result.boundingbox) && result.boundingbox.length === 4) {
+    const [south, north, west, east] = result.boundingbox.map((val) => toNumber(val));
+    if ([south, north, west, east].every((val) => val !== null)) {
+      bounds = {
+        sw: { lat: south, lng: west },
+        ne: { lat: north, lng: east },
+      };
+    }
+  }
+  return { lat, lng, bounds };
+};
+
 exports.getFeaturedListings = async (_req, res) => {
   try {
-    const listings = await Listing.find({ status: 'active' }).sort({ createdAt: -1 }).limit(6);
-    return res.json({ listings });
+    const listings = await Listing.find({ status: 'active' })
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean();
+    return res.json({ listings: listings.map(toPublicListing) });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to load listings' });
@@ -50,9 +182,11 @@ exports.getFeaturedListings = async (_req, res) => {
 exports.searchListings = async (req, res) => {
   try {
     const filter = buildFilters(req.body);
-    const listings = await Listing.find(filter).populate('owner', 'name verificationStatus');
+    const listings = await Listing.find(filter)
+      .select('title address rent roomType beds baths photos status location')
+      .lean();
     const mapped = listings.map((l) => ({
-      ...l.toObject(),
+      ...toPublicListing(l),
       explanation: `Matches ${req.body.location ? 'location,' : ''} within your budget.`,
     }));
     return res.json({ listings: mapped });
@@ -62,9 +196,135 @@ exports.searchListings = async (req, res) => {
   }
 };
 
+exports.searchListingsByLocation = async (req, res) => {
+  try {
+    const {
+      locationText,
+      minRent,
+      maxRent,
+      roomType,
+      title,
+      lat,
+      lng,
+      radiusKm,
+    } = req.query;
+
+    const filter = {
+      status: 'active',
+    };
+    if (title) filter.title = { $regex: title, $options: 'i' };
+    if (roomType) filter.roomType = roomType;
+    if (minRent || maxRent) {
+      filter.rent = {};
+      if (minRent) filter.rent.$gte = Number(minRent);
+      if (maxRent) filter.rent.$lte = Number(maxRent);
+    }
+
+    const explicitCoords = parseCoordinates({ lat, lng });
+    let searchCenter = explicitCoords ? { lat: explicitCoords[1], lng: explicitCoords[0] } : null;
+    let bounds = null;
+
+    if (!searchCenter && locationText) {
+      try {
+        const geo = await geocodeLocationText(locationText);
+        if (geo) {
+          searchCenter = { lat: geo.lat, lng: geo.lng };
+          bounds = geo.bounds || null;
+        }
+      } catch (geoError) {
+        console.warn('Geocoding failed, falling back to text search', geoError.message);
+      }
+    }
+
+    const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
+    if (searchCenter) {
+      filter.location = {
+        $geoWithin: {
+          $centerSphere: [[searchCenter.lng, searchCenter.lat], radius / 6378.1],
+        },
+      };
+    } else if (locationText) {
+      filter.address = { $regex: locationText, $options: 'i' };
+    }
+
+    const listings = await Listing.find(filter)
+      .select('title address rent roomType beds baths photos status location')
+      .lean();
+
+    const mapCenter = searchCenter || centerFromListings(listings);
+    const defaultBounds = bounds || boundsFromCenter(mapCenter, radius);
+
+    return res.json({
+      listings: listings.map(toPublicListing),
+      mapCenter,
+      defaultBounds,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Location search failed' });
+  }
+};
+
+exports.getListingsInBounds = async (req, res) => {
+  try {
+    const neLat = toNumber(req.query.neLat);
+    const neLng = toNumber(req.query.neLng);
+    const swLat = toNumber(req.query.swLat);
+    const swLng = toNumber(req.query.swLng);
+    if ([neLat, neLng, swLat, swLng].some((val) => val === null)) {
+      return res.status(400).json({ message: 'Invalid bounds coordinates.' });
+    }
+
+    const filter = { status: 'active' };
+    if (req.query.title) filter.title = { $regex: req.query.title, $options: 'i' };
+    if (req.query.minRent || req.query.maxRent) {
+      filter.rent = {};
+      if (req.query.minRent) filter.rent.$gte = Number(req.query.minRent);
+      if (req.query.maxRent) filter.rent.$lte = Number(req.query.maxRent);
+    }
+    if (req.query.roomType) filter.roomType = req.query.roomType;
+
+    filter.location = {
+      $geoWithin: {
+        $box: [
+          [swLng, swLat],
+          [neLng, neLat],
+        ],
+      },
+    };
+
+    const listings = await Listing.find(filter)
+      .select('title address rent roomType beds baths photos status location')
+      .lean();
+
+    return res.json({ listings: listings.map(toPublicListing) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Bounds search failed' });
+  }
+};
+
 exports.getListingById = async (req, res) => {
   try {
-    const listing = await Listing.findById(req.params.id).populate('owner', 'name verificationStatus');
+    const listing = await Listing.findById(req.params.id).populate('owner', 'name verificationStatus').lean();
+    if (!listing) return res.status(404).json({ message: 'Listing not found' });
+    const publicListing = {
+      ...listing,
+      mapLocation: toPublicListing(listing).mapLocation,
+    };
+    return res.json({ listing: publicListing });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to load listing' });
+  }
+};
+
+exports.getListingByIdForOwner = async (req, res) => {
+  try {
+    const listing = await Listing.findOne({ _id: req.params.id, owner: req.user.id }).populate(
+      'owner',
+      'name verificationStatus'
+    );
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
     return res.json({ listing });
   } catch (err) {
@@ -90,6 +350,11 @@ exports.createListing = async (req, res) => {
     const { title, description, rent, address, roomType, beds, baths, status = 'active' } = req.body;
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
+    const coordinates = parseCoordinates(req.body);
+
+    if (!coordinates) {
+      return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
+    }
 
     const uploadedPhotos = [];
     if (req.files?.length) {
@@ -118,6 +383,10 @@ exports.createListing = async (req, res) => {
       amenities,
       photos,
       status,
+      location: {
+        type: 'Point',
+        coordinates,
+      },
     });
     try {
       await notifyTenantsForListing(listing);
@@ -139,6 +408,7 @@ exports.updateListing = async (req, res) => {
     const { title, description, rent, address, roomType, beds, baths, status } = req.body;
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
+    const coordinates = parseCoordinates(req.body);
     const uploadedPhotos = [];
     if (req.files?.length) {
       for (const file of req.files) {
@@ -161,6 +431,11 @@ exports.updateListing = async (req, res) => {
     if (beds) listing.beds = Number(beds);
     if (baths) listing.baths = Number(baths);
     if (status) listing.status = status;
+    if (coordinates) {
+      listing.location = { type: 'Point', coordinates };
+    } else if (!listing.location?.coordinates?.length) {
+      return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
+    }
     listing.amenities = amenities.length ? amenities : [];
     listing.photos = photos;
 

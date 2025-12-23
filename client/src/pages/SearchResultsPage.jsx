@@ -1,14 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import SearchResultsMap from '../components/maps/SearchResultsMap';
 
-const useQuery = () => new URLSearchParams(useLocation().search);
+const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
 
 const SearchResultsPage = () => {
-  const query = useQuery();
+  const location = useLocation();
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const navigate = useNavigate();
   const { user } = useAuth();
+
   const [filters, setFilters] = useState({
     title: query.get('title') || '',
     location: query.get('location') || '',
@@ -16,31 +19,67 @@ const SearchResultsPage = () => {
     roomType: query.get('roomType') || '',
   });
   const [results, setResults] = useState([]);
+  const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [mapBounds, setMapBounds] = useState(null);
+  const [pendingBounds, setPendingBounds] = useState(null);
+  const [showSearchArea, setShowSearchArea] = useState(false);
+  const [activeListingId, setActiveListingId] = useState(null);
+  const [viewMode, setViewMode] = useState('list');
+  const [loading, setLoading] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [saveStatus, setSaveStatus] = useState('');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const search = async () => {
-    const payload = {
-      title: filters.title,
-      location: filters.location,
-      maxRent: filters.maxRent,
-      roomType: filters.roomType,
-    };
-    const res = await api.post('/listings/search', payload);
-    setResults(res.data.listings || []);
-  };
+  const normalizedFilters = useMemo(
+    () => ({
+      title: query.get('title') || '',
+      location: query.get('location') || '',
+      maxRent: query.get('maxRent') || '',
+      roomType: query.get('roomType') || '',
+    }),
+    [location.search]
+  );
+
+  const fetchSearchResults = useCallback(async (nextFilters) => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('/listings/search', {
+        params: {
+          locationText: nextFilters.location,
+          title: nextFilters.title,
+          maxRent: nextFilters.maxRent,
+          roomType: nextFilters.roomType,
+        },
+      });
+      setResults(res.data.listings || []);
+      setMapCenter(res.data.mapCenter || DEFAULT_CENTER);
+      setMapBounds(res.data.defaultBounds || null);
+      setShowSearchArea(false);
+      setPendingBounds(null);
+      setActiveListingId(null);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to fetch listings.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    search();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setFilters(normalizedFilters);
+    fetchSearchResults(normalizedFilters);
+  }, [fetchSearchResults, normalizedFilters]);
 
   const onSubmit = (e) => {
     e.preventDefault();
-    const params = new URLSearchParams(filters);
+    const params = new URLSearchParams();
+    if (filters.title) params.append('title', filters.title);
+    if (filters.location) params.append('location', filters.location);
+    if (filters.maxRent) params.append('maxRent', filters.maxRent);
+    if (filters.roomType) params.append('roomType', filters.roomType);
     navigate(`/search?${params.toString()}`);
-    search();
   };
 
   const onSaveFilter = async () => {
@@ -72,32 +111,74 @@ const SearchResultsPage = () => {
     }
   };
 
+  const onMapMoved = (bounds) => {
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    setPendingBounds({
+      ne: { lat: ne.lat, lng: ne.lng },
+      sw: { lat: sw.lat, lng: sw.lng },
+    });
+    setShowSearchArea(true);
+  };
+
+  const onSearchArea = async () => {
+    if (!pendingBounds) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.get('/listings/in-bounds', {
+        params: {
+          neLat: pendingBounds.ne.lat,
+          neLng: pendingBounds.ne.lng,
+          swLat: pendingBounds.sw.lat,
+          swLng: pendingBounds.sw.lng,
+          maxRent: filters.maxRent,
+          roomType: filters.roomType,
+          title: filters.title,
+        },
+      });
+      setResults(res.data.listings || []);
+      setShowSearchArea(false);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || 'Failed to search this area.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const activeListing = results.find((listing) => listing._id === activeListingId);
+
   return (
-    <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-bold text-[var(--text)]">Search Results</h1>
+    <div className="mx-auto max-w-6xl px-6 py-8">
+      <h1 className="text-3xl font-bold text-[var(--text)]">Find Properties</h1>
+      <p className="mt-2 text-sm text-[var(--muted)]">
+        Search by neighborhood or city and explore listings with the map.
+      </p>
+
       <form
         onSubmit={onSubmit}
-        className="mt-4 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-6"
+        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_auto_auto]"
       >
-        <input
-          type="text"
-          value={filters.title}
-          onChange={(e) => setFilters((f) => ({ ...f, title: e.target.value }))}
-          placeholder="Title keywords"
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
-        />
         <input
           type="text"
           value={filters.location}
           onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
-          placeholder="Location"
+          placeholder="Location (Banani, Gulshan, Dhanmondi...)"
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
+        />
+        <input
+          type="text"
+          value={filters.title}
+          onChange={(e) => setFilters((f) => ({ ...f, title: e.target.value }))}
+          placeholder="Keywords"
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <input
           type="number"
           value={filters.maxRent}
           onChange={(e) => setFilters((f) => ({ ...f, maxRent: e.target.value }))}
-          placeholder="Max Rent"
+          placeholder="Max Budget"
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <select
@@ -128,6 +209,7 @@ const SearchResultsPage = () => {
           </button>
         )}
       </form>
+
       {saveMsg && (
         <div
           className={`mt-2 text-sm font-semibold ${
@@ -138,57 +220,131 @@ const SearchResultsPage = () => {
         </div>
       )}
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        {results.map((l) => (
-          <div
-            key={l._id}
-            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]"
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-[var(--muted)]">
+          {loading ? 'Loading listings...' : `${results.length} results`}
+        </div>
+        <div className="flex items-center gap-2 md:hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              viewMode === 'list'
+                ? 'bg-[var(--primary)] text-[var(--on-primary)]'
+                : 'bg-[var(--surface-2)] text-[var(--muted)]'
+            }`}
           >
-            <div className="flex flex-col gap-3 p-4 md:flex-row">
-              <div className="h-32 w-full rounded-lg bg-[var(--surface-2)] md:w-40">
-                <img
-                  src={
-                    l.photos?.[0] ||
-                    'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=800&q=80'
-                  }
-                  alt={l.title}
-                  className="h-full w-full rounded-lg object-cover"
-                />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-lg font-semibold text-[var(--text)]">{l.title}</div>
-                    <div className="text-sm text-[var(--muted)]">{l.address}</div>
+            List
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('map')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              viewMode === 'map'
+                ? 'bg-[var(--primary)] text-[var(--on-primary)]'
+                : 'bg-[var(--surface-2)] text-[var(--muted)]'
+            }`}
+          >
+            Map
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-3 rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4 text-sm text-[var(--muted)]">
+          {error}
+        </div>
+      )}
+
+      <div className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_420px]">
+        <div
+          className={`space-y-4 md:max-h-[calc(100vh-220px)] md:overflow-y-auto ${
+            viewMode === 'map' ? 'hidden md:block' : 'block'
+          }`}
+        >
+          {results.map((listing) => (
+            <button
+              key={listing._id}
+              type="button"
+              onClick={() => setActiveListingId(listing._id)}
+              className={`w-full rounded-2xl border text-left shadow-[var(--shadow)] transition ${
+                listing._id === activeListingId
+                  ? 'border-[var(--primary)] bg-[var(--surface)]'
+                  : 'border-[var(--border)] bg-[var(--surface)]'
+              }`}
+            >
+              <div className="flex flex-col gap-4 p-4 md:flex-row">
+                <div className="h-36 w-full overflow-hidden rounded-xl bg-[var(--surface-2)] md:w-44">
+                  <img
+                    src={
+                      listing.photos?.[0] ||
+                      'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=800&q=80'
+                    }
+                    alt={listing.title}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-lg font-semibold text-[var(--text)]">{listing.title}</div>
+                      <div className="text-sm text-[var(--muted)]">{listing.address}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-[var(--primary)]">
+                        ৳{Number(listing.rent || 0).toLocaleString()}/mo
+                      </div>
+                      <div className="text-xs capitalize text-[var(--muted)]">{listing.status}</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-[var(--primary)]">${l.rent}/mo</div>
-                    <div className="text-xs capitalize text-[var(--muted)]">{l.status}</div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                    <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{listing.beds} Beds</span>
+                    <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{listing.baths} Baths</span>
+                    <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{listing.roomType}</span>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-[var(--muted)]">Click to preview on the map</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/listing/${listing._id}`);
+                      }}
+                      className="rounded-lg border border-[var(--primary)] px-3 py-2 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--surface-2)]"
+                    >
+                      View Details
+                    </button>
                   </div>
                 </div>
-                <div className="mt-2 text-sm text-[var(--muted)]">
-                  {l.explanation || 'Within your filters and budget.'}
-                </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-[var(--muted)]">
-                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.beds} Beds</span>
-                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.baths} Baths</span>
-                  <span className="rounded-full bg-[var(--surface-2)] px-2 py-1">{l.roomType}</span>
-                </div>
-                <button
-                  onClick={() => navigate(`/listing/${l._id}`)}
-                  className="mt-3 inline-block rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-semibold text-[var(--on-primary)] hover:brightness-110 active:brightness-95"
-                >
-                  View Details
-                </button>
               </div>
+            </button>
+          ))}
+          {!results.length && !loading && (
+            <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-6 text-sm text-[var(--muted)]">
+              No listings found. Adjust filters and search again.
             </div>
+          )}
+        </div>
+
+        <div className={`${viewMode === 'map' ? 'block' : 'hidden md:block'} md:sticky md:top-6`}>
+          <div className="h-[70vh] md:h-[calc(100vh-220px)]">
+            <SearchResultsMap
+              listings={results}
+              activeListingId={activeListingId}
+              mapCenter={mapCenter}
+              mapBounds={mapBounds}
+              showSearchArea={showSearchArea}
+              onSearchArea={onSearchArea}
+              onMapMoved={onMapMoved}
+              onMarkerClick={(listing) => setActiveListingId(listing._id)}
+            />
           </div>
-        ))}
-        {!results.length && (
-          <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-6 text-sm text-[var(--muted)]">
-            No listings found. Adjust filters and search again.
-          </div>
-        )}
+          {activeListing && (
+            <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)] shadow-[var(--shadow)]">
+              Highlighting <span className="font-semibold text-[var(--text)]">{activeListing.title}</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

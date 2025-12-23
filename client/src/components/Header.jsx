@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from './NotificationBell';
 
 const navLinkClass = ({ isActive }) =>
   `text-sm font-medium transition-colors ${
@@ -21,8 +22,8 @@ const Header = () => {
           <NavLink to="/" className={navLinkClass}>
             Home
           </NavLink>
-          <NavLink to="/search" className={navLinkClass}>
-            Browse Listings
+          <NavLink to="/find" className={navLinkClass}>
+            Find Properties
           </NavLink>
           <NavLink to="/how-it-works" className={navLinkClass}>
             How It Works
@@ -50,6 +51,7 @@ const Header = () => {
           )}
           {user && (
             <div className="flex items-center gap-3">
+              <NotificationBell />
               {user.role === 'tenant' && (
                 <Link
                   to="/dashboard/tenant"

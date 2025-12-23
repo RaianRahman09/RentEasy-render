@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api/axios';
+import ListingLocationMap from '../components/maps/ListingLocationMap';
 
 const ListingDetailPage = () => {
   const { id } = useParams();
@@ -15,6 +16,9 @@ const ListingDetailPage = () => {
   }, [id]);
 
   if (!listing) return null;
+  const coordinates = listing.location?.coordinates;
+  const hasCoordinates =
+    Array.isArray(coordinates) && coordinates.length === 2 && coordinates.every((value) => Number.isFinite(value));
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -69,7 +73,15 @@ const ListingDetailPage = () => {
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-semibold text-slate-700">Location</div>
-            <div className="mt-2 h-48 rounded-lg bg-slate-100"></div>
+            <div className="mt-2">
+              {hasCoordinates ? (
+                <ListingLocationMap coordinates={coordinates} title={listing.title} />
+              ) : (
+                <div className="flex h-60 items-center justify-center rounded-lg bg-slate-100 text-sm text-slate-500">
+                  Location not available
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

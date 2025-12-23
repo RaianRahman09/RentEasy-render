@@ -47,7 +47,7 @@ const HomePage = () => {
             </p>
             <div className="flex gap-3">
               <button
-                onClick={() => navigate('/search')}
+                onClick={() => navigate('/find')}
                 className="rounded-md bg-[var(--on-primary)] px-5 py-3 text-sm font-semibold text-[var(--primary)] shadow"
               >
                 Find a Room
@@ -130,7 +130,7 @@ const HomePage = () => {
           <div className="flex items-center justify-between">
             <h2 className="text-2xl font-bold text-[var(--text)]">Featured Listings</h2>
             <button
-              onClick={() => navigate('/search')}
+              onClick={() => navigate('/find')}
               className="text-sm font-semibold text-[var(--primary)]"
             >
               View All Listings

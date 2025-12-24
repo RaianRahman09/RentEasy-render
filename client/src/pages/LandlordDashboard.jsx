@@ -35,10 +35,18 @@ const LandlordDashboard = () => {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <h1 className="text-3xl font-bold text-slate-900">Landlord Dashboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold text-slate-900">Landlord Dashboard</h1>
+        <Link
+          to="/landlord/availability"
+          className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Set Viewing Availability
+        </Link>
+      </div>
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         <StatCard title="Active Listings" value={data.activeCount} to="/landlord/listings?status=active" />
-        <StatCard title="Upcoming Viewings" value={data.upcomingViewings} />
+        <StatCard title="Upcoming Viewings" value={data.upcomingViewings} to="/landlord/appointments" />
         <StatCard title="Pending Tickets" value={data.pendingTickets} />
         <StatCard
           title="Total Earnings"
@@ -87,7 +95,9 @@ const LandlordDashboard = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Upcoming Appointments</h2>
-            <button className="text-sm font-semibold text-blue-700">Manage all</button>
+            <Link to="/landlord/appointments" className="text-sm font-semibold text-blue-700">
+              Manage all
+            </Link>
           </div>
           <ul className="mt-3 space-y-3 text-sm text-slate-700">
             {data.appointments.map((a) => (

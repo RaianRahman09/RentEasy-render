@@ -1,16 +1,37 @@
 const Listing = require('../models/Listing');
 const SavedFilter = require('../models/SavedFilter');
+const Appointment = require('../models/Appointment');
+const { formatAppointmentWindow } = require('../utils/appointmentEmail');
 
 exports.getTenantDashboard = async (req, res) => {
   try {
     const savedFilters = await SavedFilter.find({ tenant: req.user.id }).sort({ updatedAt: -1 });
+    const now = new Date();
+    const upcomingCount = await Appointment.countDocuments({
+      tenantId: req.user.id,
+      status: { $in: ['REQUESTED', 'ACCEPTED'] },
+      startTime: { $gte: now },
+    });
+    const upcomingAppointments = await Appointment.find({
+      tenantId: req.user.id,
+      status: { $in: ['REQUESTED', 'ACCEPTED'] },
+      startTime: { $gte: now },
+    })
+      .populate('listingId', 'title')
+      .sort({ startTime: 1 })
+      .limit(3)
+      .lean();
     return res.json({
-      upcomingViewings: 0,
+      upcomingViewings: upcomingCount,
       savedFilters,
       savedSearches: savedFilters,
       messages: 0,
       tickets: 0,
-      appointments: [],
+      appointments: upcomingAppointments.map((appointment) => ({
+        listing: appointment.listingId?.title || 'Listing',
+        date: formatAppointmentWindow(appointment.startTime, appointment.endTime),
+        status: appointment.status,
+      })),
       recentMessages: [],
     });
   } catch (err) {
@@ -23,7 +44,22 @@ exports.getLandlordDashboard = async (req, res) => {
   try {
     const listings = await Listing.find({ owner: req.user.id });
     const activeCount = listings.filter((l) => l.status === 'active').length;
-    const upcomingViewings = 2;
+    const now = new Date();
+    const upcomingViewings = await Appointment.countDocuments({
+      landlordId: req.user.id,
+      status: { $in: ['REQUESTED', 'ACCEPTED'] },
+      startTime: { $gte: now },
+    });
+    const upcomingAppointments = await Appointment.find({
+      landlordId: req.user.id,
+      status: { $in: ['REQUESTED', 'ACCEPTED'] },
+      startTime: { $gte: now },
+    })
+      .populate('listingId', 'title')
+      .populate('tenantId', 'name')
+      .sort({ startTime: 1 })
+      .limit(3)
+      .lean();
     const pendingTickets = 1;
     const earnings = { thisMonth: 1500, allTime: 4500 };
     const snapshot = listings.slice(0, 3).map((l) => ({
@@ -34,10 +70,12 @@ exports.getLandlordDashboard = async (req, res) => {
       views: 100,
       bookings: 2,
     }));
-    const appointments = [
-      { tenant: 'Alice', listing: 'Downtown Apt', when: 'Oct 27, 11:00 AM', status: 'Confirmed' },
-      { tenant: 'Bob', listing: 'Suburban House', when: 'Oct 29, 3:00 PM', status: 'Requested' },
-    ];
+    const appointments = upcomingAppointments.map((appointment) => ({
+      tenant: appointment.tenantId?.name || 'Tenant',
+      listing: appointment.listingId?.title || 'Listing',
+      when: formatAppointmentWindow(appointment.startTime, appointment.endTime),
+      status: appointment.status,
+    }));
     const tickets = [{ subject: 'Listing question', status: 'open' }];
     const messages = [{ with: 'Tenant A', snippet: 'Can I schedule a viewing?' }];
     return res.json({

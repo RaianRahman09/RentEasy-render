@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import ListingLocationMap from '../components/maps/ListingLocationMap';
+import { useAuth } from '../context/AuthContext';
 
 const ListingDetailPage = () => {
   const { id } = useParams();
+  const { user } = useAuth();
   const [listing, setListing] = useState(null);
 
   useEffect(() => {
@@ -66,9 +68,22 @@ const ListingDetailPage = () => {
               <button className="flex-1 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">
                 Message Landlord
               </button>
-              <button className="flex-1 rounded-lg border border-blue-700 px-3 py-2 text-sm font-semibold text-blue-700">
-                Request Viewing
-              </button>
+              {user?.role === 'tenant' ? (
+                <Link
+                  to={`/appointments/new/${listing._id}`}
+                  className="flex-1 rounded-lg border border-blue-700 px-3 py-2 text-center text-sm font-semibold text-blue-700"
+                >
+                  Request Viewing
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-400"
+                >
+                  Request Viewing
+                </button>
+              )}
             </div>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

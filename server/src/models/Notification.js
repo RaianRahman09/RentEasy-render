@@ -4,7 +4,21 @@ const NotificationSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    type: { type: String, enum: ['MESSAGE', 'BOOKING', 'PAYMENT', 'SUPPORT'], required: true },
+    type: {
+      type: String,
+      enum: [
+        'MESSAGE',
+        'BOOKING',
+        'PAYMENT',
+        'SUPPORT',
+        'APPOINTMENT_REQUESTED',
+        'APPOINTMENT_ACCEPTED',
+        'APPOINTMENT_REJECTED',
+        'APPOINTMENT_RESCHEDULED',
+        'APPOINTMENT_REMINDER',
+      ],
+      required: true,
+    },
     title: { type: String, required: true },
     body: { type: String, default: '' },
     link: { type: String, required: true },

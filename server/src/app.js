@@ -8,6 +8,8 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const verificationRoutes = require('./routes/verificationRoutes');
 const savedFilterRoutes = require('./routes/savedFilterRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
+const availabilityRoutes = require('./routes/availabilityRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
 
 const app = express();
 
@@ -29,6 +31,8 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', verificationRoutes);
 app.use('/api', savedFilterRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api', availabilityRoutes);
+app.use('/api', appointmentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error', err);

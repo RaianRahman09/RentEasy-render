@@ -1,14 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
-const StatCard = ({ title, value, subtitle }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-    <div className="text-xs font-semibold uppercase text-slate-500">{title}</div>
-    <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
-    {subtitle && <div className="text-sm text-slate-600">{subtitle}</div>}
-  </div>
-);
+const StatCard = ({ title, value, subtitle, to }) => {
+  const content = (
+    <>
+      <div className="text-xs font-semibold uppercase text-slate-500">{title}</div>
+      <div className="mt-2 text-2xl font-bold text-slate-900">{value}</div>
+      {subtitle && <div className="text-sm text-slate-600">{subtitle}</div>}
+    </>
+  );
+  const classes = 'rounded-xl border border-slate-200 bg-white p-4 shadow-sm';
+  return to ? (
+    <Link to={to} className={`${classes} block`}>
+      {content}
+    </Link>
+  ) : (
+    <div className={classes}>{content}</div>
+  );
+};
 
 const emptyForm = { name: '', title: '', location: '', maxRent: '', roomType: '' };
 
@@ -90,7 +100,7 @@ const TenantDashboard = () => {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-bold text-slate-900">My Dashboard</h1>
       <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <StatCard title="Upcoming Viewings" value={data.upcomingViewings} subtitle="This week" />
+        <StatCard title="Upcoming Viewings" value={data.upcomingViewings} subtitle="This week" to="/tenant/appointments" />
         <StatCard title="Saved Filters" value={savedFilters.length} subtitle="Active searches" />
         <StatCard title="New Messages" value={data.messages} subtitle="Unread messages" />
         <StatCard title="Open Tickets" value={data.tickets} subtitle="Support requests" />
@@ -200,7 +210,9 @@ const TenantDashboard = () => {
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Upcoming Appointments</h2>
-            <button className="text-sm font-semibold text-blue-700">View all</button>
+            <Link to="/tenant/appointments" className="text-sm font-semibold text-blue-700">
+              View all
+            </Link>
           </div>
           <ul className="mt-3 space-y-3 text-sm text-slate-700">
             {(data.appointments || []).map((a) => (

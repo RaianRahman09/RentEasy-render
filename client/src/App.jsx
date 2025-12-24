@@ -21,6 +21,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import PaymentDashboard from './pages/PaymentDashboard';
 import { NotificationProvider } from './context/NotificationContext';
+import LandlordAvailabilityPage from './pages/LandlordAvailabilityPage';
+import LandlordAppointmentsPage from './pages/LandlordAppointmentsPage';
+import TenantAppointmentsPage from './pages/TenantAppointmentsPage';
+import RequestAppointmentPage from './pages/RequestAppointmentPage';
 
 const App = () => {
   return (
@@ -110,6 +114,38 @@ const App = () => {
                 element={
                   <ProtectedRoute roles={['landlord']}>
                     <ListingFormPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/landlord/availability"
+                element={
+                  <ProtectedRoute roles={['landlord']}>
+                    <LandlordAvailabilityPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/landlord/appointments"
+                element={
+                  <ProtectedRoute roles={['landlord']}>
+                    <LandlordAppointmentsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/tenant/appointments"
+                element={
+                  <ProtectedRoute roles={['tenant']}>
+                    <TenantAppointmentsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/appointments/new/:listingId"
+                element={
+                  <ProtectedRoute roles={['tenant']}>
+                    <RequestAppointmentPage />
                   </ProtectedRoute>
                 }
               />

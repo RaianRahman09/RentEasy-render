@@ -7,6 +7,7 @@ const defaultState = {
   title: '',
   description: '',
   rent: '',
+  rentStartMonth: '',
   address: '',
   roomType: 'Entire Place',
   beds: 1,
@@ -16,6 +17,7 @@ const defaultState = {
 };
 
 const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
+const RENT_START_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const MapClickHandler = ({ onSelect }) => {
   useMapEvents({
@@ -44,6 +46,7 @@ const ListingFormPage = () => {
   const [existingPhotos, setExistingPhotos] = useState([]);
   const [newPhotos, setNewPhotos] = useState([]);
   const [error, setError] = useState('');
+  const [rentStartMonthError, setRentStartMonthError] = useState('');
   const [coordinates, setCoordinates] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [manualLat, setManualLat] = useState('');
@@ -61,6 +64,7 @@ const ListingFormPage = () => {
         title: l.title,
         description: l.description,
         rent: l.rent,
+        rentStartMonth: l.rentStartMonth || '',
         address: l.address,
         roomType: l.roomType,
         beds: l.beds,
@@ -168,6 +172,16 @@ const ListingFormPage = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    const rentMonthError = !form.rentStartMonth
+      ? 'Rent starting month is required.'
+      : RENT_START_MONTH_PATTERN.test(form.rentStartMonth)
+        ? ''
+        : 'Use YYYY-MM format.';
+    if (rentMonthError) {
+      setRentStartMonthError(rentMonthError);
+      setLoading(false);
+      return;
+    }
     if (!coordinates || !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng))) {
       setError('Please select a valid map location before saving.');
       setLoading(false);
@@ -177,6 +191,7 @@ const ListingFormPage = () => {
     payload.append('title', form.title);
     payload.append('description', form.description);
     payload.append('rent', form.rent);
+    payload.append('rentStartMonth', form.rentStartMonth);
     payload.append('address', form.address);
     payload.append('roomType', form.roomType);
     payload.append('beds', form.beds);
@@ -237,7 +252,7 @@ const ListingFormPage = () => {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-bold text-slate-900">{isEdit ? 'Edit Listing' : 'Create New Listing'}</h1>
       <form onSubmit={onSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <div>
             <label className="text-sm font-semibold text-slate-700">Title</label>
             <input
@@ -257,6 +272,29 @@ const ListingFormPage = () => {
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               required
             />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Rent starting month</label>
+            <input
+              type="month"
+              value={form.rentStartMonth}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setForm((f) => ({ ...f, rentStartMonth: nextValue }));
+                if (rentStartMonthError) {
+                  setRentStartMonthError(
+                    !nextValue
+                      ? 'Rent starting month is required.'
+                      : RENT_START_MONTH_PATTERN.test(nextValue)
+                        ? ''
+                        : 'Use YYYY-MM format.'
+                  );
+                }
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              required
+            />
+            {rentStartMonthError && <div className="mt-1 text-xs font-semibold text-red-600">{rentStartMonthError}</div>}
           </div>
         </div>
         <div>

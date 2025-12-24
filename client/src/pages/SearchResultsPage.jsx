@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import SearchResultsMap from '../components/maps/SearchResultsMap';
+import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
 
@@ -17,6 +18,7 @@ const SearchResultsPage = () => {
     location: query.get('location') || '',
     maxRent: query.get('maxRent') || '',
     roomType: query.get('roomType') || '',
+    rentStartMonth: query.get('rentStartMonth') || '',
   });
   const [results, setResults] = useState([]);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
@@ -37,9 +39,20 @@ const SearchResultsPage = () => {
       location: query.get('location') || '',
       maxRent: query.get('maxRent') || '',
       roomType: query.get('roomType') || '',
+      rentStartMonth: query.get('rentStartMonth') || '',
     }),
     [location.search]
   );
+
+  const buildSearchParams = (nextFilters) => {
+    const params = new URLSearchParams();
+    if (nextFilters.title) params.append('title', nextFilters.title);
+    if (nextFilters.location) params.append('location', nextFilters.location);
+    if (nextFilters.maxRent) params.append('maxRent', nextFilters.maxRent);
+    if (nextFilters.roomType) params.append('roomType', nextFilters.roomType);
+    if (nextFilters.rentStartMonth) params.append('rentStartMonth', nextFilters.rentStartMonth);
+    return params;
+  };
 
   const fetchSearchResults = useCallback(async (nextFilters) => {
     setLoading(true);
@@ -51,6 +64,7 @@ const SearchResultsPage = () => {
           title: nextFilters.title,
           maxRent: nextFilters.maxRent,
           roomType: nextFilters.roomType,
+          rentStartMonth: nextFilters.rentStartMonth,
         },
       });
       setResults(res.data.listings || []);
@@ -74,11 +88,14 @@ const SearchResultsPage = () => {
 
   const onSubmit = (e) => {
     e.preventDefault();
-    const params = new URLSearchParams();
-    if (filters.title) params.append('title', filters.title);
-    if (filters.location) params.append('location', filters.location);
-    if (filters.maxRent) params.append('maxRent', filters.maxRent);
-    if (filters.roomType) params.append('roomType', filters.roomType);
+    const params = buildSearchParams(filters);
+    navigate(`/search?${params.toString()}`);
+  };
+
+  const onClearRentStartMonth = () => {
+    const nextFilters = { ...filters, rentStartMonth: '' };
+    setFilters(nextFilters);
+    const params = buildSearchParams(nextFilters);
     navigate(`/search?${params.toString()}`);
   };
 
@@ -135,6 +152,7 @@ const SearchResultsPage = () => {
           maxRent: filters.maxRent,
           roomType: filters.roomType,
           title: filters.title,
+          rentStartMonth: filters.rentStartMonth,
         },
       });
       setResults(res.data.listings || []);
@@ -158,7 +176,7 @@ const SearchResultsPage = () => {
 
       <form
         onSubmit={onSubmit}
-        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_auto_auto]"
+        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr_auto_auto]"
       >
         <input
           type="text"
@@ -192,6 +210,23 @@ const SearchResultsPage = () => {
           <option value="Studio">Studio</option>
           <option value="Shared">Shared</option>
         </select>
+        <div className="flex items-center gap-2">
+          <input
+            type="month"
+            value={filters.rentStartMonth}
+            onChange={(e) => setFilters((f) => ({ ...f, rentStartMonth: e.target.value }))}
+            aria-label="Rent starting month"
+            className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={onClearRentStartMonth}
+            disabled={!filters.rentStartMonth}
+            className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--muted)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Clear Filter
+          </button>
+        </div>
         <button
           type="submit"
           className="rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-[var(--on-primary)] hover:brightness-110 active:brightness-95"
@@ -289,6 +324,11 @@ const SearchResultsPage = () => {
                     <div>
                       <div className="text-lg font-semibold text-[var(--text)]">{listing.title}</div>
                       <div className="text-sm text-[var(--muted)]">{listing.address}</div>
+                      {listing.rentStartMonth && (
+                        <div className="text-xs text-[var(--muted)]">
+                          Available from: {formatRentStartMonth(listing.rentStartMonth)}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold text-[var(--primary)]">

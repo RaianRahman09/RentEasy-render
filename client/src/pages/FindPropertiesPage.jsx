@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const FindPropertiesPage = () => {
   const navigate = useNavigate();
@@ -83,6 +84,11 @@ const FindPropertiesPage = () => {
                 <div className="mt-2 text-sm font-semibold text-[var(--primary)]">
                   ৳{Number(listing.rent || 0).toLocaleString()}/mo
                 </div>
+                {listing.rentStartMonth && (
+                  <div className="mt-1 text-xs text-[var(--muted)]">
+                    Available from: {formatRentStartMonth(listing.rentStartMonth)}
+                  </div>
+                )}
                 <button
                   type="button"
                   onClick={() => navigate(`/listing/${listing._id}`)}

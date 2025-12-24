@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import ListingLocationMap from '../components/maps/ListingLocationMap';
 import { useAuth } from '../context/AuthContext';
+import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const ListingDetailPage = () => {
   const { id } = useParams();
@@ -44,6 +45,11 @@ const ListingDetailPage = () => {
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-700">${listing.rent}/mo</div>
               <div className="text-sm text-slate-500">{listing.roomType}</div>
+              {listing.rentStartMonth && (
+                <div className="text-sm text-slate-500">
+                  Available from: {formatRentStartMonth(listing.rentStartMonth)}
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-4 text-sm text-slate-700">{listing.description}</div>

@@ -6,6 +6,11 @@ const ListingSchema = new mongoose.Schema(
     title: { type: String, required: true },
     description: { type: String, default: '' },
     rent: { type: Number, required: true },
+    rentStartMonth: {
+      type: String,
+      required: true,
+      match: [/^\d{4}-(0[1-9]|1[0-2])$/, 'Rent start month must be in YYYY-MM format'],
+    },
     address: { type: String, required: true },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
@@ -38,5 +43,6 @@ const ListingSchema = new mongoose.Schema(
 );
 
 ListingSchema.index({ location: '2dsphere' });
+ListingSchema.index({ rentStartMonth: 1 });
 
 module.exports = mongoose.model('Listing', ListingSchema);

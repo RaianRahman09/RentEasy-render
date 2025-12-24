@@ -2,6 +2,8 @@ const Listing = require('../models/Listing');
 const cloudinary = require('../utils/cloudinary');
 const { notifyTenantsForListing } = require('../services/notificationService');
 
+const RENT_START_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+
 const toArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -28,8 +30,18 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const applyRentStartMonthFilter = (filter, rentStartMonth) => {
+  if (!rentStartMonth) return null;
+  const normalizedRentStartMonth = String(rentStartMonth).trim();
+  if (!RENT_START_MONTH_REGEX.test(normalizedRentStartMonth)) {
+    return 'Rent start month must be in YYYY-MM format.';
+  }
+  filter.rentStartMonth = { $lte: normalizedRentStartMonth };
+  return null;
+};
+
 const buildFilters = (body = {}) => {
-  const { location, minRent, maxRent, roomType, amenities, status, title } = body;
+  const { location, minRent, maxRent, roomType, amenities, status, title, rentStartMonth } = body;
   const filter = {};
   if (status) filter.status = status;
   if (title) filter.title = { $regex: title, $options: 'i' };
@@ -42,6 +54,7 @@ const buildFilters = (body = {}) => {
     if (minRent) filter.rent.$gte = Number(minRent);
     if (maxRent) filter.rent.$lte = Number(maxRent);
   }
+  if (rentStartMonth) filter.rentStartMonth = { $lte: rentStartMonth };
   return filter;
 };
 
@@ -112,6 +125,7 @@ const toPublicListing = (listing) => {
     title: listing.title,
     address: listing.address,
     rent: listing.rent,
+    rentStartMonth: listing.rentStartMonth,
     roomType: listing.roomType,
     beds: listing.beds,
     baths: listing.baths,
@@ -181,9 +195,12 @@ exports.getFeaturedListings = async (_req, res) => {
 
 exports.searchListings = async (req, res) => {
   try {
+    if (req.body.rentStartMonth && !RENT_START_MONTH_REGEX.test(req.body.rentStartMonth)) {
+      return res.status(400).json({ message: 'Rent start month must be in YYYY-MM format.' });
+    }
     const filter = buildFilters(req.body);
     const listings = await Listing.find(filter)
-      .select('title address rent roomType beds baths photos status location')
+      .select('title address rent rentStartMonth roomType beds baths photos status location')
       .lean();
     const mapped = listings.map((l) => ({
       ...toPublicListing(l),
@@ -207,6 +224,7 @@ exports.searchListingsByLocation = async (req, res) => {
       lat,
       lng,
       radiusKm,
+      rentStartMonth,
     } = req.query;
 
     const filter = {
@@ -218,6 +236,10 @@ exports.searchListingsByLocation = async (req, res) => {
       filter.rent = {};
       if (minRent) filter.rent.$gte = Number(minRent);
       if (maxRent) filter.rent.$lte = Number(maxRent);
+    }
+    const rentStartMonthError = applyRentStartMonthFilter(filter, rentStartMonth);
+    if (rentStartMonthError) {
+      return res.status(400).json({ message: rentStartMonthError });
     }
 
     const explicitCoords = parseCoordinates({ lat, lng });
@@ -248,7 +270,7 @@ exports.searchListingsByLocation = async (req, res) => {
     }
 
     const listings = await Listing.find(filter)
-      .select('title address rent roomType beds baths photos status location')
+      .select('title address rent rentStartMonth roomType beds baths photos status location')
       .lean();
 
     const mapCenter = searchCenter || centerFromListings(listings);
@@ -283,6 +305,10 @@ exports.getListingsInBounds = async (req, res) => {
       if (req.query.maxRent) filter.rent.$lte = Number(req.query.maxRent);
     }
     if (req.query.roomType) filter.roomType = req.query.roomType;
+    const rentStartMonthError = applyRentStartMonthFilter(filter, req.query.rentStartMonth);
+    if (rentStartMonthError) {
+      return res.status(400).json({ message: rentStartMonthError });
+    }
 
     filter.location = {
       $geoWithin: {
@@ -294,7 +320,7 @@ exports.getListingsInBounds = async (req, res) => {
     };
 
     const listings = await Listing.find(filter)
-      .select('title address rent roomType beds baths photos status location')
+      .select('title address rent rentStartMonth roomType beds baths photos status location')
       .lean();
 
     return res.json({ listings: listings.map(toPublicListing) });
@@ -335,6 +361,9 @@ exports.getListingByIdForOwner = async (req, res) => {
 
 exports.getMyListings = async (req, res) => {
   try {
+    if (req.query.rentStartMonth && !RENT_START_MONTH_REGEX.test(req.query.rentStartMonth)) {
+      return res.status(400).json({ message: 'Rent start month must be in YYYY-MM format.' });
+    }
     const filter = buildFilters(req.query);
     filter.owner = req.user.id;
     const listings = await Listing.find(filter).sort({ updatedAt: -1 });
@@ -347,11 +376,15 @@ exports.getMyListings = async (req, res) => {
 
 exports.createListing = async (req, res) => {
   try {
-    const { title, description, rent, address, roomType, beds, baths, status = 'active' } = req.body;
+    const { title, description, rent, rentStartMonth, address, roomType, beds, baths, status = 'active' } = req.body;
+    const normalizedRentStartMonth = rentStartMonth?.trim();
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
     const coordinates = parseCoordinates(req.body);
 
+    if (!normalizedRentStartMonth || !RENT_START_MONTH_REGEX.test(normalizedRentStartMonth)) {
+      return res.status(400).json({ message: 'Rent start month is required in YYYY-MM format.' });
+    }
     if (!coordinates) {
       return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
     }
@@ -376,6 +409,7 @@ exports.createListing = async (req, res) => {
       title,
       description,
       rent: Number(rent),
+      rentStartMonth: normalizedRentStartMonth,
       address,
       roomType,
       beds: Number(beds),
@@ -405,7 +439,7 @@ exports.updateListing = async (req, res) => {
     const listing = await Listing.findOne({ _id: req.params.id, owner: req.user.id });
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
 
-    const { title, description, rent, address, roomType, beds, baths, status } = req.body;
+    const { title, description, rent, rentStartMonth, address, roomType, beds, baths, status } = req.body;
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
     const coordinates = parseCoordinates(req.body);
@@ -431,6 +465,15 @@ exports.updateListing = async (req, res) => {
     if (beds) listing.beds = Number(beds);
     if (baths) listing.baths = Number(baths);
     if (status) listing.status = status;
+    if (typeof rentStartMonth !== 'undefined') {
+      const normalizedRentStartMonth = String(rentStartMonth).trim();
+      if (!RENT_START_MONTH_REGEX.test(normalizedRentStartMonth)) {
+        return res.status(400).json({ message: 'Rent start month must be in YYYY-MM format.' });
+      }
+      listing.rentStartMonth = normalizedRentStartMonth;
+    } else if (!listing.rentStartMonth) {
+      return res.status(400).json({ message: 'Rent start month is required in YYYY-MM format.' });
+    }
     if (coordinates) {
       listing.location = { type: 'Point', coordinates };
     } else if (!listing.location?.coordinates?.length) {

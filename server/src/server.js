@@ -1,7 +1,9 @@
 require('dotenv').config();
+const http = require('http');
 const mongoose = require('mongoose');
 const app = require('./app');
 const connectDB = require('./config/db');
+const { initSocket } = require('./socket');
 const User = require('./models/User');
 const Listing = require('./models/Listing');
 
@@ -81,7 +83,9 @@ const start = async () => {
   await connectDB(process.env.MONGO_URI);
   await seedAdmin();
   await seedLandlordSample();
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  const server = http.createServer(app);
+  initSocket(server);
+  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 };
 
 mongoose.set('strictQuery', false);

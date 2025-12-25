@@ -12,6 +12,7 @@ const ListingDetailPage = () => {
   const navigate = useNavigate();
   const [listing, setListing] = useState(null);
   const [startingRent, setStartingRent] = useState(false);
+  const [startingChat, setStartingChat] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
@@ -113,9 +114,26 @@ const ListingDetailPage = () => {
               <div className="text-xs font-semibold text-green-700">Verified</div>
             )}
             <div className="mt-3 flex gap-2">
-              <button className="flex-1 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white">
-                Message Landlord
-              </button>
+              {user?.role === 'tenant' && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setStartingChat(true);
+                    try {
+                      const res = await api.post('/chat/conversations', { listingId: listing._id });
+                      navigate(`/chat/${res.data.conversationId}`);
+                    } catch (err) {
+                      toast.error(err.response?.data?.message || 'Failed to start conversation.');
+                    } finally {
+                      setStartingChat(false);
+                    }
+                  }}
+                  disabled={startingChat}
+                  className="flex-1 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {startingChat ? 'Starting...' : 'Message Landlord'}
+                </button>
+              )}
               {user?.role === 'tenant' ? (
                 <Link
                   to={`/appointments/new/${listing._id}`}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useChat } from '../context/ChatContext';
 import NotificationBell from './NotificationBell';
 
 const navLinkClass = ({ isActive }) =>
@@ -10,6 +11,7 @@ const navLinkClass = ({ isActive }) =>
 
 const Header = () => {
   const { user, logout } = useAuth();
+  const { unreadCount } = useChat();
 
   return (
     <header className="border-b border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]">
@@ -51,6 +53,33 @@ const Header = () => {
           )}
           {user && (
             <div className="flex items-center gap-3">
+              {user.role !== 'admin' && (
+                <Link
+                  to="/chat"
+                  aria-label="Chat"
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--text)]"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    className="h-5 w-5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M7.5 8.5h9" />
+                    <path d="M7.5 12h6" />
+                    <path d="M6 18l-3 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H6z" />
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--danger)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--on-danger)]">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </Link>
+              )}
               <NotificationBell />
               {user.role === 'tenant' && (
                 <Link

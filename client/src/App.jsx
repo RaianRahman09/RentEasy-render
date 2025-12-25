@@ -27,14 +27,17 @@ import TenantAppointmentsPage from './pages/TenantAppointmentsPage';
 import RequestAppointmentPage from './pages/RequestAppointmentPage';
 import BookingPaymentPage from './pages/BookingPaymentPage';
 import TenantPaymentsPage from './pages/TenantPaymentsPage';
+import ChatPage from './pages/ChatPage';
+import { ChatProvider } from './context/ChatContext';
 
 const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
         <NotificationProvider>
-          <Layout>
-            <Routes>
+          <ChatProvider>
+            <Layout>
+              <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/find" element={<FindPropertiesPage />} />
               <Route path="/auth/login" element={<LoginPage />} />
@@ -177,6 +180,22 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute roles={['tenant', 'landlord']}>
+                    <ChatPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/chat/:conversationId"
+                element={
+                  <ProtectedRoute roles={['tenant', 'landlord']}>
+                    <ChatPage />
+                  </ProtectedRoute>
+                }
+              />
 
               <Route path="/how-it-works" element={<InfoPage title="How It Works">Content coming soon.</InfoPage>} />
               <Route path="/support" element={<InfoPage title="Support">Create tickets coming soon.</InfoPage>} />
@@ -185,8 +204,9 @@ const App = () => {
               <Route path="/terms" element={<InfoPage title="Terms of Service">Terms details.</InfoPage>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Layout>
+              </Routes>
+            </Layout>
+          </ChatProvider>
         </NotificationProvider>
       </AuthProvider>
     </BrowserRouter>

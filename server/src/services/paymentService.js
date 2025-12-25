@@ -2,7 +2,6 @@ const stripeSdk = require('stripe');
 const Listing = require('../models/Listing');
 const Rental = require('../models/Rental');
 const User = require('../models/User');
-const { generateReceiptPdf } = require('../utils/receiptPdf');
 const { createNotification } = require('../services/notificationService');
 
 const stripe = stripeSdk(process.env.STRIPE_SECRET_KEY || 'sk_test_missing');
@@ -32,12 +31,6 @@ const finalizeSucceededPayment = async (payment, paymentIntent) => {
     Listing.findById(payment.listingId),
     Rental.findById(payment.rentalId),
   ]);
-
-  if (!payment.receiptPdfPath && !payment.receiptUrl) {
-    const receiptPath = await generateReceiptPdf({ payment, tenant, listing });
-    payment.receiptPdfPath = receiptPath;
-    payment.receiptPdfUrl = `/api/payments/${payment._id}/receipt`;
-  }
 
   await payment.save();
 

@@ -1,4 +1,3 @@
-const fs = require('fs');
 const mongoose = require('mongoose');
 const stripeSdk = require('stripe');
 const Listing = require('../models/Listing');
@@ -421,14 +420,7 @@ exports.getPaymentReceipt = async (req, res) => {
     if (payment.receiptUrl) {
       return res.json({ url: payment.receiptUrl });
     }
-
-    if (!payment.receiptPdfPath || !fs.existsSync(payment.receiptPdfPath)) {
-      return res.status(404).json({ message: 'Receipt not available yet.' });
-    }
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="receipt_${payment._id}.pdf"`);
-    return fs.createReadStream(payment.receiptPdfPath).pipe(res);
+    return res.status(404).json({ message: 'Receipt not available yet.' });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to download receipt.' });

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Toaster } from 'react-hot-toast';
 import Header from './Header';
 import Footer from './Footer';
 
@@ -8,6 +9,7 @@ const Layout = ({ children }) => {
       <Header />
       <main className="flex-1 bg-[var(--bg)]">{children}</main>
       <Footer />
+      <Toaster position="top-right" />
     </div>
   );
 };

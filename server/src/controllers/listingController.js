@@ -1,4 +1,5 @@
 const Listing = require('../models/Listing');
+const Rental = require('../models/Rental');
 const cloudinary = require('../utils/cloudinary');
 const { notifyTenantsForListing } = require('../services/notificationService');
 
@@ -366,8 +367,22 @@ exports.getMyListings = async (req, res) => {
     }
     const filter = buildFilters(req.query);
     filter.owner = req.user.id;
-    const listings = await Listing.find(filter).sort({ updatedAt: -1 });
-    return res.json({ listings });
+    const listings = await Listing.find(filter).sort({ updatedAt: -1 }).lean();
+    const listingIds = listings.map((listing) => listing._id);
+    const activeRentals = listingIds.length
+      ? await Rental.find({ listingId: { $in: listingIds }, status: 'active' })
+          .select('listingId moveOutNoticeMonth')
+          .lean()
+      : [];
+    const activeMap = new Map(
+      activeRentals.map((rental) => [String(rental.listingId), rental])
+    );
+    const enriched = listings.map((listing) => ({
+      ...listing,
+      activeRental: activeMap.has(String(listing._id)),
+      activeRentalMoveOutNoticeMonth: activeMap.get(String(listing._id))?.moveOutNoticeMonth || null,
+    }));
+    return res.json({ listings: enriched });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to fetch listings' });
@@ -376,7 +391,18 @@ exports.getMyListings = async (req, res) => {
 
 exports.createListing = async (req, res) => {
   try {
-    const { title, description, rent, rentStartMonth, address, roomType, beds, baths, status = 'active' } = req.body;
+    const {
+      title,
+      description,
+      rent,
+      serviceCharge,
+      rentStartMonth,
+      address,
+      roomType,
+      beds,
+      baths,
+      status = 'active',
+    } = req.body;
     const normalizedRentStartMonth = rentStartMonth?.trim();
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
@@ -404,11 +430,20 @@ exports.createListing = async (req, res) => {
       return res.status(400).json({ message: 'You can upload up to 5 photos.' });
     }
 
+    if (typeof serviceCharge === 'undefined' || serviceCharge === '') {
+      return res.status(400).json({ message: 'Service charge is required.' });
+    }
+    const parsedServiceCharge = Number(serviceCharge);
+    if (!Number.isFinite(parsedServiceCharge) || parsedServiceCharge < 0) {
+      return res.status(400).json({ message: 'Service charge must be a non-negative number.' });
+    }
+
     const listing = await Listing.create({
       owner: req.user.id,
       title,
       description,
       rent: Number(rent),
+      serviceCharge: parsedServiceCharge,
       rentStartMonth: normalizedRentStartMonth,
       address,
       roomType,
@@ -439,7 +474,7 @@ exports.updateListing = async (req, res) => {
     const listing = await Listing.findOne({ _id: req.params.id, owner: req.user.id });
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
 
-    const { title, description, rent, rentStartMonth, address, roomType, beds, baths, status } = req.body;
+    const { title, description, rent, serviceCharge, rentStartMonth, address, roomType, beds, baths, status } = req.body;
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
     const coordinates = parseCoordinates(req.body);
@@ -460,11 +495,26 @@ exports.updateListing = async (req, res) => {
     if (title) listing.title = title;
     if (typeof description !== 'undefined') listing.description = description;
     if (rent) listing.rent = Number(rent);
+    if (typeof serviceCharge !== 'undefined') {
+      const parsedServiceCharge = Number(serviceCharge);
+      if (!Number.isFinite(parsedServiceCharge) || parsedServiceCharge < 0) {
+        return res.status(400).json({ message: 'Service charge must be a non-negative number.' });
+      }
+      listing.serviceCharge = parsedServiceCharge;
+    }
     if (address) listing.address = address;
     if (roomType) listing.roomType = roomType;
     if (beds) listing.beds = Number(beds);
     if (baths) listing.baths = Number(baths);
-    if (status) listing.status = status;
+    if (status) {
+      if (status === 'active' && listing.status === 'archived') {
+        const activeRental = await Rental.findOne({ listingId: listing._id, status: 'active' }).select('_id');
+        if (activeRental) {
+          return res.status(400).json({ message: 'Listing can be activated after the tenant leaves.' });
+        }
+      }
+      listing.status = status;
+    }
     if (typeof rentStartMonth !== 'undefined') {
       const normalizedRentStartMonth = String(rentStartMonth).trim();
       if (!RENT_START_MONTH_REGEX.test(normalizedRentStartMonth)) {

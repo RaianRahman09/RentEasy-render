@@ -10,6 +10,9 @@ const savedFilterRoutes = require('./routes/savedFilterRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const availabilityRoutes = require('./routes/availabilityRoutes');
 const appointmentRoutes = require('./routes/appointmentRoutes');
+const rentalRoutes = require('./routes/rentalRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const paymentController = require('./controllers/paymentController');
 
 const app = express();
 
@@ -19,6 +22,7 @@ app.use(
     credentials: true,
   })
 );
+app.post('/payments/stripe/webhook', express.raw({ type: 'application/json' }), paymentController.handleStripeWebhook);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -33,6 +37,8 @@ app.use('/api', savedFilterRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api', availabilityRoutes);
 app.use('/api', appointmentRoutes);
+app.use('/api', rentalRoutes);
+app.use('/api', paymentRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error', err);

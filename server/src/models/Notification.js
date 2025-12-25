@@ -16,6 +16,7 @@ const NotificationSchema = new mongoose.Schema(
         'APPOINTMENT_REJECTED',
         'APPOINTMENT_RESCHEDULED',
         'APPOINTMENT_REMINDER',
+        'RENTAL',
       ],
       required: true,
     },

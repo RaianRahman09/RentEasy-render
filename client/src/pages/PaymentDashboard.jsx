@@ -1,5 +1,16 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import api from '../api/axios';
+import { downloadReceipt } from '../utils/receipt';
+
+const formatCurrency = (value) => `৳${Number(value || 0).toLocaleString()}`;
+
+const statusStyles = {
+  succeeded: 'bg-green-100 text-green-700',
+  processing: 'bg-yellow-100 text-yellow-700',
+  failed: 'bg-red-100 text-red-700',
+};
 
 const StatCard = ({ label, value, helper }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -10,38 +21,96 @@ const StatCard = ({ label, value, helper }) => (
 );
 
 const PaymentDashboard = () => {
-  const payouts = [
-    { label: "This Month's Earnings", value: '$1,250', helper: '12% vs last month' },
-    { label: "Last Month's Earnings", value: '$980', helper: 'Settled Oct 02' },
-    { label: 'All-Time Earnings', value: '$14,300', helper: 'Since joining' },
-    { label: 'Upcoming Payout', value: '$720', helper: 'Scheduled Nov 02' }
-  ];
+  const [payments, setPayments] = useState([]);
+  const [summary, setSummary] = useState({ thisMonth: 0, lastMonth: 0, allTime: 0, upcomingPayout: null });
+  const [filters, setFilters] = useState({ range: '30', status: 'all', listing: 'all' });
+  const [selectedPayment, setSelectedPayment] = useState(null);
 
-  const listingSlices = [
-    { label: 'Suburban House', value: 4200, color: '#2563eb' },
-    { label: 'Shewrapara Studio', value: 3100, color: '#f97316' },
-    { label: 'Gulshan Flat', value: 2700, color: '#22c55e' },
-    { label: 'Banani Shared', value: 1800, color: '#a855f7' }
-  ];
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [summaryRes, paymentsRes] = await Promise.all([
+          api.get('/landlord/payments/summary'),
+          api.get('/landlord/payments'),
+        ]);
+        setSummary(summaryRes.data);
+        setPayments(paymentsRes.data.payments || []);
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Failed to load payments.');
+      }
+    };
+    load();
+  }, []);
 
-  const incomeTrend = [
-    { label: 'May', amount: 500 },
-    { label: 'Jun', amount: 900 },
-    { label: 'Jul', amount: 820 },
-    { label: 'Aug', amount: 1000 },
-    { label: 'Sep', amount: 1300 },
-    { label: 'Oct', amount: 1250 }
-  ];
+  const listingOptions = useMemo(() => {
+    const unique = new Map();
+    payments.forEach((payment) => {
+      if (payment.listingId?.title) unique.set(payment.listingId._id, payment.listingId.title);
+    });
+    return Array.from(unique.entries()).map(([id, title]) => ({ id, title }));
+  }, [payments]);
 
-  const transactions = [
-    { id: 1, date: 'Oct 27', listing: 'Shewrapara Studio Apartment', type: 'Rent', amount: 1500, status: 'Cleared' },
-    { id: 2, date: 'Oct 24', listing: 'Gulshan shared flat', type: 'Deposit', amount: 800, status: 'Processing' },
-    { id: 3, date: 'Oct 19', listing: 'Banani shared flat', type: 'Late fee', amount: 120, status: 'Cleared' },
-    { id: 4, date: 'Oct 12', listing: 'Suburban House', type: 'Rent', amount: 1800, status: 'Cleared' }
-  ];
+  const filteredPayments = useMemo(() => {
+    let filtered = [...payments];
+    if (filters.status !== 'all') {
+      filtered = filtered.filter((payment) => payment.status === filters.status);
+    }
+    if (filters.listing !== 'all') {
+      filtered = filtered.filter((payment) => payment.listingId?._id === filters.listing);
+    }
+    if (filters.range !== 'all') {
+      const days = Number(filters.range);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      filtered = filtered.filter((payment) => new Date(payment.createdAt) >= cutoff);
+    }
+    return filtered;
+  }, [payments, filters]);
+
+  const listingSlices = useMemo(() => {
+    const totals = {};
+    payments
+      .filter((payment) => payment.status === 'succeeded')
+      .forEach((payment) => {
+        const title = payment.listingId?.title || 'Listing';
+        totals[title] = (totals[title] || 0) + Number(payment.total || 0);
+      });
+    return Object.entries(totals)
+      .map(([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 4)
+      .map((slice, index) => ({
+        ...slice,
+        color: ['#2563eb', '#f97316', '#22c55e', '#a855f7'][index % 4],
+      }));
+  }, [payments]);
+
+  const incomeTrend = useMemo(() => {
+    const now = new Date();
+    const buckets = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      buckets.push({
+        key,
+        label: date.toLocaleDateString(undefined, { month: 'short' }),
+        amount: 0,
+      });
+    }
+    payments
+      .filter((payment) => payment.status === 'succeeded')
+      .forEach((payment) => {
+        const date = new Date(payment.createdAt);
+        const key = `${date.getFullYear()}-${date.getMonth()}`;
+        const bucket = buckets.find((item) => item.key === key);
+        if (bucket) bucket.amount += Number(payment.total || 0);
+      });
+    return buckets;
+  }, [payments]);
 
   const donutStops = useMemo(() => {
-    const total = listingSlices.reduce((sum, item) => sum + item.value, 0);
+    if (!listingSlices.length) return [];
+    const total = listingSlices.reduce((sum, item) => sum + item.value, 0) || 1;
     let cursor = 0;
     return listingSlices.map((item) => {
       const from = cursor;
@@ -58,7 +127,7 @@ const PaymentDashboard = () => {
 
   const chartWidth = 320;
   const chartHeight = 140;
-  const maxIncome = Math.max(...incomeTrend.map((p) => p.amount));
+  const maxIncome = Math.max(...incomeTrend.map((p) => p.amount), 1);
   const linePoints = incomeTrend
     .map((point, idx) => {
       const x = (idx / (incomeTrend.length - 1)) * chartWidth;
@@ -67,6 +136,14 @@ const PaymentDashboard = () => {
     })
     .join(' ');
   const areaPoints = `0,${chartHeight} ${linePoints} ${chartWidth},${chartHeight}`;
+
+  const handleReceipt = async (paymentId) => {
+    try {
+      await downloadReceipt(paymentId, { routeBase: '/landlord/payments' });
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Receipt not available yet.');
+    }
+  };
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -83,39 +160,55 @@ const PaymentDashboard = () => {
           >
             ← Back to Dashboard
           </Link>
-          <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-            Payout Settings
-          </button>
         </div>
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-4">
-        {payouts.map((item) => (
-          <StatCard key={item.label} label={item.label} value={item.value} helper={item.helper} />
-        ))}
+        <StatCard label="This Month's Earnings" value={formatCurrency(summary.thisMonth)} />
+        <StatCard label="Last Month's Earnings" value={formatCurrency(summary.lastMonth)} />
+        <StatCard label="All-Time Earnings" value={formatCurrency(summary.allTime)} />
+        <StatCard
+          label="Upcoming Payout"
+          value={summary.upcomingPayout ? formatCurrency(summary.upcomingPayout) : 'N/A'}
+          helper={summary.upcomingPayout ? 'Scheduled' : 'Stripe Connect not enabled'}
+        />
       </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
           <h2 className="text-lg font-semibold text-slate-900">Payment Overview</h2>
           <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <option>Date Range</option>
-              <option>Last 30 days</option>
-              <option>Last quarter</option>
-              <option>Last year</option>
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              value={filters.range}
+              onChange={(e) => setFilters((prev) => ({ ...prev, range: e.target.value }))}
+            >
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="365">Last year</option>
+              <option value="all">All time</option>
             </select>
-            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <option>Listing</option>
-              <option>All listings</option>
-              <option>Suburban House</option>
-              <option>Gulshan flat</option>
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              value={filters.listing}
+              onChange={(e) => setFilters((prev) => ({ ...prev, listing: e.target.value }))}
+            >
+              <option value="all">All listings</option>
+              {listingOptions.map((listing) => (
+                <option key={listing.id} value={listing.id}>
+                  {listing.title}
+                </option>
+              ))}
             </select>
-            <select className="rounded-lg border border-slate-200 bg-white px-3 py-2">
-              <option>Status</option>
-              <option>Cleared</option>
-              <option>Processing</option>
-              <option>Upcoming</option>
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
+              value={filters.status}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            >
+              <option value="all">All statuses</option>
+              <option value="succeeded">Succeeded</option>
+              <option value="processing">Processing</option>
+              <option value="failed">Failed</option>
             </select>
           </div>
         </div>
@@ -129,17 +222,18 @@ const PaymentDashboard = () => {
             <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
               <div
                 className="mx-auto h-40 w-40 rounded-full shadow-inner"
-                style={{ backgroundImage: donutBackground }}
+                style={{ backgroundImage: donutStops.length ? donutBackground : 'none' }}
                 aria-hidden
               />
               <ul className="space-y-2 text-sm text-slate-700">
+                {listingSlices.length === 0 && <li className="text-xs text-slate-500">No earnings yet.</li>}
                 {donutStops.map((slice) => (
                   <li key={slice.label} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: slice.color }} />
                       <span>{slice.label}</span>
                     </div>
-                    <span className="font-semibold text-slate-900">${slice.value.toLocaleString()}</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(slice.value)}</span>
                   </li>
                 ))}
               </ul>
@@ -149,7 +243,7 @@ const PaymentDashboard = () => {
           <div className="rounded-xl border border-slate-100 p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-800">Income Over Months</p>
-              <span className="text-xs text-slate-500">USD</span>
+              <span className="text-xs text-slate-500">BDT</span>
             </div>
             <div className="mt-4">
               <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-48 w-full">
@@ -159,11 +253,7 @@ const PaymentDashboard = () => {
                     <stop offset="100%" stopColor="#2563eb" stopOpacity="0" />
                   </linearGradient>
                 </defs>
-                <polyline
-                  fill="url(#lineGradient)"
-                  points={areaPoints}
-                  stroke="none"
-                />
+                <polyline fill="url(#lineGradient)" points={areaPoints} stroke="none" />
                 <polyline
                   fill="none"
                   stroke="#2563eb"
@@ -194,36 +284,62 @@ const PaymentDashboard = () => {
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Recent Transactions</h2>
-            <button className="text-sm font-semibold text-blue-700">Export CSV</button>
           </div>
           <div className="mt-3 overflow-auto">
-            <table className="w-full min-w-[540px] text-sm text-slate-700">
-              <thead>
-                <tr className="text-xs uppercase text-slate-500">
+            <table className="w-full min-w-[640px] text-sm text-slate-700">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr>
                   <th className="py-2 text-left">Date</th>
+                  <th className="py-2 text-left">Tenant</th>
                   <th className="py-2 text-left">Listing</th>
-                  <th className="py-2 text-left">Type</th>
                   <th className="py-2 text-left">Amount</th>
                   <th className="py-2 text-left">Status</th>
+                  <th className="py-2 text-left">Transaction</th>
+                  <th className="py-2 text-right">Receipt</th>
                 </tr>
               </thead>
               <tbody>
-                {transactions.map((t) => (
-                  <tr key={t.id} className="border-t border-slate-100">
-                    <td className="py-3">{t.date}</td>
-                    <td className="py-3">{t.listing}</td>
-                    <td className="py-3">{t.type}</td>
-                    <td className="py-3 font-semibold text-slate-900">${t.amount.toLocaleString()}</td>
+                {filteredPayments.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-sm text-slate-500">
+                      No payments found.
+                    </td>
+                  </tr>
+                )}
+                {filteredPayments.map((payment) => (
+                  <tr
+                    key={payment._id}
+                    className="border-t border-slate-100 hover:bg-slate-50"
+                    onClick={() => setSelectedPayment(payment)}
+                  >
+                    <td className="py-3">{new Date(payment.createdAt).toLocaleDateString()}</td>
+                    <td className="py-3">{payment.tenantId?.name || 'Tenant'}</td>
+                    <td className="py-3">{payment.listingId?.title || 'Listing'}</td>
+                    <td className="py-3 font-semibold text-slate-900">{formatCurrency(payment.total)}</td>
                     <td className="py-3">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          t.status === 'Cleared'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-amber-100 text-amber-700'
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                          statusStyles[payment.status] || 'bg-slate-100 text-slate-600'
                         }`}
+                        title={payment.status === 'processing' ? 'Waiting for Stripe confirmation' : undefined}
                       >
-                        {t.status}
+                        {payment.status}
                       </span>
+                    </td>
+                    <td className="py-3 text-xs text-slate-500">
+                      {payment.stripePaymentIntentId?.slice(0, 12) || '—'}
+                    </td>
+                    <td className="py-3 text-right">
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleReceipt(payment._id);
+                        }}
+                        disabled={payment.status !== 'succeeded'}
+                        className="text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        Download
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -231,49 +347,61 @@ const PaymentDashboard = () => {
             </table>
           </div>
         </div>
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-base font-semibold text-slate-900">Payout Schedule</h3>
-            <ul className="mt-3 space-y-3 text-sm text-slate-700">
-              <li className="flex items-center justify-between">
-                <span>Next automated payout</span>
-                <span className="font-semibold text-slate-900">$720 • Nov 02</span>
-              </li>
-              <li className="flex items-center justify-between">
-                <span>Minimum balance rule</span>
-                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
-                  $200 threshold
-                </span>
-              </li>
-              <li className="flex items-center justify-between">
-                <span>Destination</span>
-                <span className="text-sm text-slate-600">Checking •••• 1420</span>
-              </li>
-            </ul>
-            <button className="mt-4 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
-              Edit payout preferences
-            </button>
-          </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-base font-semibold text-slate-900">Reminders</h3>
-            <ul className="mt-3 space-y-3 text-sm text-slate-700">
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-amber-400" />
-                <div>
-                  <div className="font-semibold text-slate-900">Confirm bank statement</div>
-                  <p className="text-slate-600">Upload latest proof to keep payouts uninterrupted.</p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Payment Detail</h2>
+          {selectedPayment ? (
+            <div className="mt-4 space-y-3 text-sm text-slate-600">
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-500">Listing</div>
+                <div className="text-sm font-semibold text-slate-900">
+                  {selectedPayment.listingId?.title || 'Listing'}
                 </div>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="mt-1 h-2 w-2 rounded-full bg-green-400" />
-                <div>
-                  <div className="font-semibold text-slate-900">Rent reminders</div>
-                  <p className="text-slate-600">Automatic reminders scheduled 3 days before due.</p>
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase text-slate-500">Tenant</div>
+                <div className="text-sm font-semibold text-slate-900">{selectedPayment.tenantId?.name || 'Tenant'}</div>
+                <div className="text-xs text-slate-500">{selectedPayment.tenantId?.email}</div>
+              </div>
+              <div className="border-t border-slate-200 pt-3">
+                <div className="flex items-center justify-between">
+                  <span>Rent subtotal</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.rentSubtotal)}</span>
                 </div>
-              </li>
-            </ul>
-          </div>
+                <div className="flex items-center justify-between">
+                  <span>Service charge</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.serviceCharge)}</span>
+                </div>
+                {selectedPayment.penaltyAmount ? (
+                  <div className="flex items-center justify-between">
+                    <span>Penalty</span>
+                    <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.penaltyAmount)}</span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between">
+                  <span>Tax</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.tax)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Platform fee</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.platformFee)}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
+                  <span className="font-semibold text-slate-900">Total</span>
+                  <span className="font-semibold text-slate-900">{formatCurrency(selectedPayment.total)}</span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleReceipt(selectedPayment._id)}
+                disabled={selectedPayment.status !== 'succeeded'}
+                className="w-full rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                Download Receipt (PDF)
+              </button>
+            </div>
+          ) : (
+            <div className="mt-4 text-sm text-slate-500">Select a payment to view details.</div>
+          )}
         </div>
       </div>
     </div>

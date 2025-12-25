@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
 
 const StatusBadge = ({ status }) => (
@@ -39,9 +40,13 @@ const MyListingsPage = () => {
     load();
   }, [statusFilter]);
 
-  const toggleArchive = async (id, current) => {
-    await api.put(`/listings/${id}`, { status: current === 'active' ? 'archived' : 'active' });
-    load();
+  const updateStatus = async (id, status) => {
+    try {
+      await api.put(`/listings/${id}`, { status });
+      load();
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update listing status.');
+    }
   };
 
   return (
@@ -98,12 +103,22 @@ const MyListingsPage = () => {
                   <Link to={`/listing/${l._id}`} className="text-slate-700">
                     View
                   </Link>
-                  <button
-                    onClick={() => toggleArchive(l._id, l.status)}
-                    className="text-red-600"
-                  >
-                    {l.status === 'active' ? 'Archive' : 'Restore'}
-                  </button>
+                  {l.status === 'active' ? (
+                    <button onClick={() => updateStatus(l._id, 'archived')} className="text-red-600">
+                      Archive
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => updateStatus(l._id, 'active')}
+                      disabled={l.activeRental}
+                      title={l.activeRental ? 'Active after tenant leaves' : undefined}
+                      className={`${
+                        l.activeRental ? 'cursor-not-allowed text-slate-400' : 'text-blue-700'
+                      }`}
+                    >
+                      Activate listing
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

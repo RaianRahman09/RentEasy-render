@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
+import { monthLabel } from '../utils/months';
 
 const StatCard = ({ title, value, subtitle, to }) => {
   const content = (
@@ -29,6 +31,12 @@ const TenantDashboard = () => {
   const [form, setForm] = useState(emptyForm);
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState('');
+  const [rentals, setRentals] = useState([]);
+  const [recentPayments, setRecentPayments] = useState([]);
+  const [moveOutOpen, setMoveOutOpen] = useState(false);
+  const [moveOutMonth, setMoveOutMonth] = useState('');
+  const [activeRental, setActiveRental] = useState(null);
+  const [moveOutLoading, setMoveOutLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -39,6 +47,29 @@ const TenantDashboard = () => {
       setSavedFilters(filters);
     };
     load();
+  }, []);
+
+  const loadRentals = async () => {
+    try {
+      const res = await api.get('/tenant/rentals');
+      setRentals(res.data.rentals || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load rentals.');
+    }
+  };
+
+  const loadPayments = async () => {
+    try {
+      const res = await api.get('/payments', { params: { limit: 4 } });
+      setRecentPayments(res.data.payments || []);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to load payments.');
+    }
+  };
+
+  useEffect(() => {
+    loadRentals();
+    loadPayments();
   }, []);
 
   const startEdit = (filter) => {
@@ -229,20 +260,69 @@ const TenantDashboard = () => {
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Recent Messages</h2>
-          <ul className="mt-3 space-y-3 text-sm text-slate-700">
-            {(data.recentMessages || []).map((m) => (
-              <li key={m.from} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-                <div>
-                  <div className="font-semibold">{m.from}</div>
-                  <div className="text-xs text-slate-500">{m.listing}</div>
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">Your rented properties</h2>
+          </div>
+          <div className="mt-3 space-y-3 text-sm text-slate-700">
+            {rentals.length === 0 && (
+              <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
+                You have no active rentals yet.
+              </div>
+            )}
+            {rentals.map((rental) => (
+              <div key={rental.rentalId} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-900">{rental.listing?.title || 'Listing'}</div>
+                    <div className="text-xs text-slate-500">{rental.listing?.address}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      Rent: ৳{Number(rental.listing?.rent || 0).toLocaleString()} • Start:{' '}
+                      {monthLabel(rental.startMonth)}
+                    </div>
+                    {rental.nextPaymentDate && (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Next payment date: {new Date(rental.nextPaymentDate).toLocaleDateString()}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      onClick={() => navigate(`/bookings/${rental.rentalId}/pay`)}
+                      className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white"
+                    >
+                      Pay rent / Extend
+                    </button>
+                    {rental.moveOutNoticeMonth ? (
+                      <button
+                        onClick={() =>
+                          navigate(`/bookings/${rental.rentalId}/pay`, { state: { mode: 'LEAVE_FLOW' } })
+                        }
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        Leave the property
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setActiveRental(rental);
+                          setMoveOutMonth(rental.nextPaymentMonth || rental.startMonth);
+                          setMoveOutOpen(true);
+                        }}
+                        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        Give move out notice
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
-                  {m.unread} unread
-                </span>
-              </li>
+                {rental.moveOutNoticeMonth && (
+                  <div className="mt-2 text-xs text-slate-500">
+                    Move-out notice: {monthLabel(rental.moveOutNoticeMonth)}
+                  </div>
+                )}
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Support Tickets</h2>
@@ -252,6 +332,103 @@ const TenantDashboard = () => {
           </button>
         </div>
       </div>
+
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-900">Recent Payments</h2>
+          <Link to="/dashboard/tenant/payments" className="text-sm font-semibold text-blue-700">
+            View more
+          </Link>
+        </div>
+        <div className="mt-3 space-y-3 text-sm text-slate-700">
+          {recentPayments.length === 0 && (
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-500">
+              No recent payments yet.
+            </div>
+          )}
+          {recentPayments.map((payment) => (
+            <div key={payment._id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">{payment.listingId?.title || 'Listing'}</div>
+                  <div className="text-xs text-slate-500">
+                    Months: {(payment.monthsPaid || []).map((m) => monthLabel(m)).join(', ') || '—'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold text-slate-900">
+                    ৳{Number(payment.total || 0).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-slate-500 capitalize">{payment.status}</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {moveOutOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-900">Give move out notice</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              You will pay rent for the move-out month as well (you can leave anytime during that month).
+            </p>
+            <div className="mt-4">
+              <label className="text-xs font-semibold text-slate-500">Move-out month</label>
+              <input
+                type="month"
+                value={moveOutMonth}
+                onChange={(e) => setMoveOutMonth(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+            <p className="mt-3 text-sm text-slate-600">
+              Are you sure you want to give move out notice and leave this property in{' '}
+              <span className="font-semibold text-slate-900">
+                {moveOutMonth ? monthLabel(moveOutMonth) : 'your selected month'}
+              </span>
+              ?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setMoveOutOpen(false);
+                  setActiveRental(null);
+                }}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-700"
+              >
+                No
+              </button>
+              <button
+                onClick={async () => {
+                  if (!activeRental) return;
+                  if (!moveOutMonth) {
+                    toast.error('Select a move-out month.');
+                    return;
+                  }
+                  setMoveOutLoading(true);
+                  try {
+                    await api.post(`/rentals/${activeRental.rentalId}/moveout-notice`, { moveOutMonth });
+                    toast.success('Move out notice sent.');
+                    setMoveOutOpen(false);
+                    setActiveRental(null);
+                    await loadRentals();
+                  } catch (err) {
+                    toast.error(err.response?.data?.message || 'Failed to process move-out.');
+                  } finally {
+                    setMoveOutLoading(false);
+                  }
+                }}
+                disabled={moveOutLoading}
+                className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {moveOutLoading ? 'Processing...' : 'Yes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

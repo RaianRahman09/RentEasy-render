@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
 import ListingLocationMap from '../components/maps/ListingLocationMap';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +9,9 @@ import { formatRentStartMonth } from '../utils/rentStartMonth';
 const ListingDetailPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [listing, setListing] = useState(null);
+  const [startingRent, setStartingRent] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -91,6 +94,26 @@ const ListingDetailPage = () => {
                 </button>
               )}
             </div>
+            {user?.role === 'tenant' && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setStartingRent(true);
+                  try {
+                    const res = await api.post(`/rentals/${listing._id}/start`);
+                    navigate(`/bookings/${res.data.rentalId}/pay`);
+                  } catch (err) {
+                    toast.error(err.response?.data?.message || 'Failed to start rental.');
+                  } finally {
+                    setStartingRent(false);
+                  }
+                }}
+                disabled={startingRent}
+                className="mt-3 w-full rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {startingRent ? 'Starting...' : 'Rent this property'}
+              </button>
+            )}
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="text-sm font-semibold text-slate-700">Location</div>

@@ -7,6 +7,7 @@ const defaultState = {
   title: '',
   description: '',
   rent: '',
+  serviceCharge: '',
   rentStartMonth: '',
   address: '',
   roomType: 'Entire Place',
@@ -64,6 +65,7 @@ const ListingFormPage = () => {
         title: l.title,
         description: l.description,
         rent: l.rent,
+        serviceCharge: Number.isFinite(l.serviceCharge) ? String(l.serviceCharge) : '0',
         rentStartMonth: l.rentStartMonth || '',
         address: l.address,
         roomType: l.roomType,
@@ -191,6 +193,7 @@ const ListingFormPage = () => {
     payload.append('title', form.title);
     payload.append('description', form.description);
     payload.append('rent', form.rent);
+    payload.append('serviceCharge', form.serviceCharge);
     payload.append('rentStartMonth', form.rentStartMonth);
     payload.append('address', form.address);
     payload.append('roomType', form.roomType);
@@ -252,7 +255,7 @@ const ListingFormPage = () => {
     <div className="mx-auto max-w-6xl px-6 py-10">
       <h1 className="text-3xl font-bold text-slate-900">{isEdit ? 'Edit Listing' : 'Create New Listing'}</h1>
       <form onSubmit={onSubmit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <div>
             <label className="text-sm font-semibold text-slate-700">Title</label>
             <input
@@ -269,6 +272,17 @@ const ListingFormPage = () => {
               type="number"
               value={form.rent}
               onChange={(e) => setForm((f) => ({ ...f, rent: e.target.value }))}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+              required
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Service charge (BDT)</label>
+            <input
+              type="number"
+              min="0"
+              value={form.serviceCharge}
+              onChange={(e) => setForm((f) => ({ ...f, serviceCharge: e.target.value }))}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               required
             />

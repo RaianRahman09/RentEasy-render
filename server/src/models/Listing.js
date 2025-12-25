@@ -6,6 +6,7 @@ const ListingSchema = new mongoose.Schema(
     title: { type: String, required: true },
     description: { type: String, default: '' },
     rent: { type: Number, required: true },
+    serviceCharge: { type: Number, default: 0, min: 0 },
     rentStartMonth: {
       type: String,
       required: true,

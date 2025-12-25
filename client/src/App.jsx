@@ -25,6 +25,8 @@ import LandlordAvailabilityPage from './pages/LandlordAvailabilityPage';
 import LandlordAppointmentsPage from './pages/LandlordAppointmentsPage';
 import TenantAppointmentsPage from './pages/TenantAppointmentsPage';
 import RequestAppointmentPage from './pages/RequestAppointmentPage';
+import BookingPaymentPage from './pages/BookingPaymentPage';
+import TenantPaymentsPage from './pages/TenantPaymentsPage';
 
 const App = () => {
   return (
@@ -159,6 +161,22 @@ const App = () => {
               />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/listing/:id" element={<ListingDetailPage />} />
+              <Route
+                path="/bookings/:id/pay"
+                element={
+                  <ProtectedRoute roles={['tenant']}>
+                    <BookingPaymentPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard/tenant/payments"
+                element={
+                  <ProtectedRoute roles={['tenant']}>
+                    <TenantPaymentsPage />
+                  </ProtectedRoute>
+                }
+              />
 
               <Route path="/how-it-works" element={<InfoPage title="How It Works">Content coming soon.</InfoPage>} />
               <Route path="/support" element={<InfoPage title="Support">Create tickets coming soon.</InfoPage>} />

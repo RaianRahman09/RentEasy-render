@@ -1,7 +1,6 @@
 const stripeSdk = require('stripe');
 const Listing = require('../models/Listing');
 const Rental = require('../models/Rental');
-const User = require('../models/User');
 const { createNotification } = require('../services/notificationService');
 
 const stripe = stripeSdk(process.env.STRIPE_SECRET_KEY || 'sk_test_missing');
@@ -26,8 +25,7 @@ const finalizeSucceededPayment = async (payment, paymentIntent) => {
     payment.receiptUrl = receiptUrl;
   }
 
-  const [tenant, listing, rental] = await Promise.all([
-    User.findById(payment.tenantId),
+  const [listing, rental] = await Promise.all([
     Listing.findById(payment.listingId),
     Rental.findById(payment.rentalId),
   ]);

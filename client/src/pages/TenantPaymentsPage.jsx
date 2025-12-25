@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { monthLabel } from '../utils/months';
-import { downloadReceipt } from '../utils/receipt';
 
 const statusStyles = {
   succeeded: 'bg-green-100 text-green-700',
@@ -11,6 +10,15 @@ const statusStyles = {
 };
 
 const formatCurrency = (value) => `৳${Number(value || 0).toLocaleString()}`;
+const apiBase = (import.meta.env.VITE_API_BASE || 'http://localhost:5001/api').replace(/\/$/, '');
+
+const buildReceiptUrl = (paymentId, mode) => {
+  const token = localStorage.getItem('accessToken');
+  const params = new URLSearchParams();
+  if (mode) params.set('mode', mode);
+  if (token) params.set('token', token);
+  return `${apiBase}/payments/${paymentId}/receipt?${params.toString()}`;
+};
 
 const TenantPaymentsPage = () => {
   const [payments, setPayments] = useState([]);
@@ -27,12 +35,18 @@ const TenantPaymentsPage = () => {
     load();
   }, []);
 
-  const handleReceipt = async (paymentId) => {
-    try {
-      await downloadReceipt(paymentId);
-    } catch (err) {
-      toast.error(err.response?.data?.message || 'Receipt not available yet.');
-    }
+  const handlePreview = (paymentId) => {
+    window.open(buildReceiptUrl(paymentId, 'preview'), '_blank', 'noopener,noreferrer');
+  };
+
+  const handleDownload = (paymentId) => {
+    const link = document.createElement('a');
+    link.href = buildReceiptUrl(paymentId, 'download');
+    link.download = `receipt_${paymentId}.pdf`;
+    link.rel = 'noopener';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
   };
 
   return (
@@ -83,13 +97,24 @@ const TenantPaymentsPage = () => {
                     </span>
                   </td>
                   <td className="py-3 text-right">
-                    <button
-                      onClick={() => handleReceipt(payment._id)}
-                      disabled={payment.status !== 'succeeded'}
-                      className="text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400"
-                    >
-                      Download
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handlePreview(payment._id)}
+                        disabled={payment.status !== 'succeeded'}
+                        title={payment.status === 'failed' ? 'Receipt available only for successful payments' : undefined}
+                        className="text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        Preview
+                      </button>
+                      <button
+                        onClick={() => handleDownload(payment._id)}
+                        disabled={payment.status !== 'succeeded'}
+                        title={payment.status === 'failed' ? 'Receipt available only for successful payments' : undefined}
+                        className="text-xs font-semibold text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                      >
+                        Download
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

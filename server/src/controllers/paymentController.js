@@ -3,6 +3,8 @@ const stripeSdk = require('stripe');
 const Listing = require('../models/Listing');
 const Payment = require('../models/Payment');
 const Rental = require('../models/Rental');
+const User = require('../models/User');
+const { generateReceiptPdf } = require('../utils/generateReceiptPdf');
 const { MONTH_REGEX, addMonths, compareMonths, currentMonth, listMonths, nextUnpaidMonth } = require('../utils/months');
 const {
   finalizeSucceededPayment,
@@ -408,7 +410,12 @@ exports.getPaymentStatus = async (req, res) => {
 
 exports.getPaymentReceipt = async (req, res) => {
   try {
-    const payment = await Payment.findById(req.params.id);
+    const paymentId = req.params.paymentId || req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(paymentId)) {
+      return res.status(400).json({ message: 'Invalid payment id.' });
+    }
+
+    const payment = await Payment.findById(paymentId);
     if (!payment) return res.status(404).json({ message: 'Payment not found.' });
 
     const isTenantOwner = String(payment.tenantId) === req.user.id;
@@ -417,10 +424,17 @@ exports.getPaymentReceipt = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden.' });
     }
 
-    if (payment.receiptUrl) {
-      return res.json({ url: payment.receiptUrl });
-    }
-    return res.status(404).json({ message: 'Receipt not available yet.' });
+    const [tenant, landlord, listing] = await Promise.all([
+      User.findById(payment.tenantId).select('name email'),
+      User.findById(payment.landlordId).select('name email'),
+      Listing.findById(payment.listingId).select('title address'),
+    ]);
+
+    const mode = req.query.mode === 'preview' ? 'inline' : 'attachment';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `${mode}; filename="receipt_${payment._id}.pdf"`);
+    generateReceiptPdf({ payment, tenant, landlord, listing, stream: res });
+    return undefined;
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to download receipt.' });

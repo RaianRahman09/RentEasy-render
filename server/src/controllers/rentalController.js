@@ -9,6 +9,7 @@ const {
   listMonths,
   compareMonths,
   nextUnpaidMonth,
+  maxMonth,
   monthLabel,
 } = require('../utils/months');
 const { createNotification } = require('../services/notificationService');
@@ -52,7 +53,7 @@ const buildListingSummary = (listing) => {
     rentPrice: listing.rent,
     serviceCharge: Number(listing.serviceCharge || 0),
     rentStartMonth: listing.rentStartMonth,
-    photos: listing.photos || [],
+    photos: images,
     images,
     listingThumbnail: images[0] || null,
     roomType: listing.roomType,
@@ -388,7 +389,20 @@ exports.leaveRental = async (req, res) => {
     rental.endMonth = due.requiredPaidUntil || rental.moveOutNoticeMonth;
     await rental.save();
 
-    await Listing.findByIdAndUpdate(listing._id, { status: 'active' });
+    const paidPayments = await Payment.find({ rentalId: rental._id, status: 'succeeded' }).select('monthsPaid');
+    const paidMonths = new Set();
+    paidPayments.forEach((payment) => {
+      (payment.monthsPaid || []).forEach((month) => paidMonths.add(month));
+    });
+    const lastPaidMonth = maxMonth(paidMonths);
+    const fallbackMonth = due.requiredPaidUntil || rental.moveOutNoticeMonth || currentMonth();
+    const baseMonth = lastPaidMonth || fallbackMonth;
+    const nextAvailableFrom = addMonths(baseMonth, 1) || addMonths(currentMonth(), 1) || currentMonth();
+
+    await Listing.findByIdAndUpdate(listing._id, {
+      status: 'active',
+      rentStartMonth: nextAvailableFrom,
+    });
 
     try {
       const tenant = await User.findById(rental.tenantId).select('name');

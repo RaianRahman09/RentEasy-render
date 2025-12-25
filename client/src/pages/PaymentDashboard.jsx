@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api/axios';
 import { downloadReceipt } from '../utils/receipt';
 
@@ -11,6 +12,8 @@ const statusStyles = {
   processing: 'bg-yellow-100 text-yellow-700',
   failed: 'bg-red-100 text-red-700',
 };
+
+const pieColors = ['#2563eb', '#f97316', '#22c55e', '#0f766e', '#eab308', '#ef4444'];
 
 const StatCard = ({ label, value, helper }) => (
   <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -67,23 +70,48 @@ const PaymentDashboard = () => {
     return filtered;
   }, [payments, filters]);
 
-  const listingSlices = useMemo(() => {
-    const totals = {};
-    payments
+  const paymentsInRange = useMemo(() => {
+    let scoped = [...payments];
+    if (filters.listing !== 'all') {
+      scoped = scoped.filter((payment) => {
+        const listingId = payment.listingId?._id || payment.listingId;
+        return String(listingId) === String(filters.listing);
+      });
+    }
+    if (filters.range !== 'all') {
+      const days = Number(filters.range);
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      scoped = scoped.filter((payment) => new Date(payment.createdAt) >= cutoff);
+    }
+    return scoped;
+  }, [payments, filters.listing, filters.range]);
+
+  const earningsByListing = useMemo(() => {
+    const totals = new Map();
+    paymentsInRange
       .filter((payment) => payment.status === 'succeeded')
       .forEach((payment) => {
-        const title = payment.listingId?.title || 'Listing';
-        totals[title] = (totals[title] || 0) + Number(payment.total || 0);
+        const id = payment.listingId?._id || payment.listingId || 'listing';
+        const name = payment.listingId?.title || 'Listing';
+        const current = totals.get(id) || { id, name, value: 0 };
+        current.value += Number(payment.total || 0);
+        totals.set(id, current);
       });
-    return Object.entries(totals)
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 4)
-      .map((slice, index) => ({
-        ...slice,
-        color: ['#2563eb', '#f97316', '#22c55e', '#a855f7'][index % 4],
-      }));
-  }, [payments]);
+    const sorted = Array.from(totals.values()).sort((a, b) => b.value - a.value);
+    const total = sorted.reduce((sum, item) => sum + item.value, 0);
+    return sorted.map((item, index) => ({
+      ...item,
+      percent: total ? (item.value / total) * 100 : 0,
+      color: pieColors[index % pieColors.length],
+    }));
+  }, [paymentsInRange]);
+
+  const rangeLabel = useMemo(() => {
+    if (filters.range === 'all') return 'All time';
+    if (filters.range === '365') return 'Last year';
+    return `Last ${filters.range} days`;
+  }, [filters.range]);
 
   const incomeTrend = useMemo(() => {
     const now = new Date();
@@ -108,23 +136,6 @@ const PaymentDashboard = () => {
     return buckets;
   }, [payments]);
 
-  const donutStops = useMemo(() => {
-    if (!listingSlices.length) return [];
-    const total = listingSlices.reduce((sum, item) => sum + item.value, 0) || 1;
-    let cursor = 0;
-    return listingSlices.map((item) => {
-      const from = cursor;
-      const to = cursor + (item.value / total) * 100;
-      cursor = to;
-      return { ...item, from, to };
-    });
-  }, [listingSlices]);
-
-  const lastStop = donutStops.length ? donutStops[donutStops.length - 1].to : 0;
-  const donutBackground = `conic-gradient(${donutStops
-    .map((slice) => `${slice.color} ${slice.from}% ${slice.to}%`)
-    .join(', ')}, #e2e8f0 ${lastStop}% 100%)`;
-
   const chartWidth = 320;
   const chartHeight = 140;
   const maxIncome = Math.max(...incomeTrend.map((p) => p.amount), 1);
@@ -143,6 +154,19 @@ const PaymentDashboard = () => {
     } catch (err) {
       toast.error(err.response?.data?.message || 'Receipt not available yet.');
     }
+  };
+
+  const renderListingTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const data = payload[0].payload;
+    const percentLabel = `${Math.round(data.percent)}%`;
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 shadow-sm">
+        <div className="font-semibold text-slate-900">
+          {data.name} — {formatCurrency(data.value)} ({percentLabel})
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -217,25 +241,49 @@ const PaymentDashboard = () => {
           <div className="rounded-xl border border-slate-100 p-4">
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-slate-800">Earnings by Listing</p>
-              <span className="text-xs text-slate-500">Last 6 months</span>
+              <span className="text-xs text-slate-500">{rangeLabel}</span>
             </div>
-            <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
-              <div
-                className="mx-auto h-40 w-40 rounded-full shadow-inner"
-                style={{ backgroundImage: donutStops.length ? donutBackground : 'none' }}
-                aria-hidden
-              />
-              <ul className="space-y-2 text-sm text-slate-700">
-                {listingSlices.length === 0 && <li className="text-xs text-slate-500">No earnings yet.</li>}
-                {donutStops.map((slice) => (
-                  <li key={slice.label} className="flex items-center justify-between gap-3">
+            <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-center">
+              <div className="h-56 w-full lg:w-1/2">
+                {earningsByListing.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={earningsByListing}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius="55%"
+                        outerRadius="85%"
+                        paddingAngle={2}
+                        stroke="transparent"
+                      >
+                        {earningsByListing.map((entry) => (
+                          <Cell key={String(entry.id)} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={renderListingTooltip} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                    No earnings yet.
+                  </div>
+                )}
+              </div>
+              <ul className="w-full space-y-2 text-sm text-slate-700 lg:w-1/2">
+                {earningsByListing.map((slice) => (
+                  <li key={String(slice.id)} className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: slice.color }} />
-                      <span>{slice.label}</span>
+                      <div>
+                        <div className="font-medium text-slate-800">{slice.name}</div>
+                        <div className="text-xs text-slate-500">{Math.round(slice.percent)}%</div>
+                      </div>
                     </div>
                     <span className="font-semibold text-slate-900">{formatCurrency(slice.value)}</span>
                   </li>
                 ))}
+                {earningsByListing.length === 0 && <li className="text-xs text-slate-500">No earnings yet.</li>}
               </ul>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
@@ -12,6 +12,7 @@ const ListingDetailPage = () => {
   const navigate = useNavigate();
   const [listing, setListing] = useState(null);
   const [startingRent, setStartingRent] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -21,24 +22,62 @@ const ListingDetailPage = () => {
     load();
   }, [id]);
 
+  const listingImages = useMemo(() => {
+    if (!listing) return [];
+    if (Array.isArray(listing.images) && listing.images.length) return listing.images;
+    if (Array.isArray(listing.imageUrls) && listing.imageUrls.length) return listing.imageUrls;
+    if (Array.isArray(listing.photos) && listing.photos.length) return listing.photos;
+    return [];
+  }, [listing]);
+
+  useEffect(() => {
+    setActiveImageIndex((prev) => {
+      if (!listingImages.length) return 0;
+      return prev >= listingImages.length ? 0 : prev;
+    });
+  }, [listingImages]);
+
   if (!listing) return null;
   const coordinates = listing.location?.coordinates;
   const hasCoordinates =
     Array.isArray(coordinates) && coordinates.length === 2 && coordinates.every((value) => Number.isFinite(value));
+  const placeholderImage =
+    'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1400&q=80';
+  const primaryImage = listingImages[activeImageIndex] || placeholderImage;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2">
-          <div className="h-80 w-full overflow-hidden rounded-xl bg-slate-200">
-            <img
-              src={
-                listing.photos?.[0] ||
-                'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1400&q=80'
-              }
-              alt={listing.title}
-              className="h-full w-full object-cover"
-            />
+          <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="h-80 w-full overflow-hidden rounded-xl bg-slate-200">
+              <img src={primaryImage} alt={listing.title} className="h-full w-full object-cover" />
+            </div>
+            {listingImages.length > 1 && (
+              <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+                {listingImages.map((image, index) => {
+                  const isActive = index === activeImageIndex;
+                  return (
+                    <button
+                      key={`${image}-${index}`}
+                      type="button"
+                      onClick={() => setActiveImageIndex(index)}
+                      className={`h-16 w-20 flex-shrink-0 overflow-hidden rounded-lg border transition ${
+                        isActive ? 'border-blue-600 ring-2 ring-blue-200' : 'border-slate-200 hover:border-blue-300'
+                      }`}
+                      aria-current={isActive}
+                    >
+                      <img
+                        src={image}
+                        alt={`${listing.title} thumbnail ${index + 1}`}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="mt-4 flex items-center justify-between">
             <div>

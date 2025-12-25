@@ -49,6 +49,19 @@ const listMonths = (start, end) => {
   return months;
 };
 
+const maxMonth = (values) => {
+  if (!values) return null;
+  let maxValue = null;
+  for (const value of values) {
+    const normalized = String(value || '').trim();
+    if (!MONTH_REGEX.test(normalized)) continue;
+    if (!maxValue || compareMonths(normalized, maxValue) > 0) {
+      maxValue = normalized;
+    }
+  }
+  return maxValue;
+};
+
 const monthLabel = (value, locale) => {
   const parsed = parseMonth(value);
   if (!parsed) return value;
@@ -79,6 +92,7 @@ module.exports = {
   addMonths,
   compareMonths,
   listMonths,
+  maxMonth,
   monthLabel,
   currentMonth,
   nextUnpaidMonth,

@@ -23,6 +23,13 @@ const toArray = (value) => {
   return [];
 };
 
+const resolveListingImages = (listing = {}) => {
+  if (Array.isArray(listing.images) && listing.images.length) return listing.images;
+  if (Array.isArray(listing.imageUrls) && listing.imageUrls.length) return listing.imageUrls;
+  if (Array.isArray(listing.photos) && listing.photos.length) return listing.photos;
+  return [];
+};
+
 const DEFAULT_SEARCH_RADIUS_KM = 8;
 const DEFAULT_MAP_CENTER = { lat: 23.8103, lng: 90.4125 };
 
@@ -121,6 +128,7 @@ const boundsFromCenter = (center, radiusKm = DEFAULT_SEARCH_RADIUS_KM) => {
 
 const toPublicListing = (listing) => {
   const obfuscated = obfuscateCoordinates(listing.location?.coordinates, listing._id?.toString() || '');
+  const images = resolveListingImages(listing);
   return {
     _id: listing._id,
     title: listing.title,
@@ -130,7 +138,8 @@ const toPublicListing = (listing) => {
     roomType: listing.roomType,
     beds: listing.beds,
     baths: listing.baths,
-    photos: listing.photos,
+    photos: images,
+    images,
     status: listing.status,
     mapLocation: obfuscated
       ? {
@@ -335,8 +344,11 @@ exports.getListingById = async (req, res) => {
   try {
     const listing = await Listing.findById(req.params.id).populate('owner', 'name verificationStatus').lean();
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
+    const images = resolveListingImages(listing);
     const publicListing = {
       ...listing,
+      photos: images,
+      images,
       mapLocation: toPublicListing(listing).mapLocation,
     };
     return res.json({ listing: publicListing });
@@ -353,7 +365,8 @@ exports.getListingByIdForOwner = async (req, res) => {
       'name verificationStatus'
     );
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
-    return res.json({ listing });
+    const images = resolveListingImages(listing);
+    return res.json({ listing: { ...listing.toObject(), photos: images, images } });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to load listing' });
@@ -377,11 +390,16 @@ exports.getMyListings = async (req, res) => {
     const activeMap = new Map(
       activeRentals.map((rental) => [String(rental.listingId), rental])
     );
-    const enriched = listings.map((listing) => ({
-      ...listing,
-      activeRental: activeMap.has(String(listing._id)),
-      activeRentalMoveOutNoticeMonth: activeMap.get(String(listing._id))?.moveOutNoticeMonth || null,
-    }));
+    const enriched = listings.map((listing) => {
+      const images = resolveListingImages(listing);
+      return {
+        ...listing,
+        photos: images,
+        images,
+        activeRental: activeMap.has(String(listing._id)),
+        activeRentalMoveOutNoticeMonth: activeMap.get(String(listing._id))?.moveOutNoticeMonth || null,
+      };
+    });
     return res.json({ listings: enriched });
   } catch (err) {
     console.error(err);

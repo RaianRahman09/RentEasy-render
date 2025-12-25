@@ -272,18 +272,46 @@ const TenantDashboard = () => {
             {rentals.map((rental) => (
               <div key={rental.rentalId} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-900">{rental.listing?.title || 'Listing'}</div>
-                    <div className="text-xs text-slate-500">{rental.listing?.address}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Rent: ৳{Number(rental.listing?.rent || 0).toLocaleString()} • Start:{' '}
-                      {monthLabel(rental.startMonth)}
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-slate-200">
+                      {rental.listing?.listingThumbnail || rental.listing?.photos?.[0] ? (
+                        <img
+                          src={rental.listing?.listingThumbnail || rental.listing?.photos?.[0]}
+                          alt={rental.listing?.title || 'Listing'}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-slate-400">
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            className="h-6 w-6"
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M3 11.5 12 5l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"
+                            />
+                          </svg>
+                        </div>
+                      )}
                     </div>
-                    {rental.nextPaymentDate && (
+                    <div className="min-w-0">
+                      <div className="font-semibold text-slate-900">{rental.listing?.title || 'Listing'}</div>
+                      <div className="text-xs text-slate-500">{rental.listing?.address}</div>
                       <div className="mt-1 text-xs text-slate-500">
-                        Next payment date: {new Date(rental.nextPaymentDate).toLocaleDateString()}
+                        Rent: ৳{Number(rental.listing?.rent || 0).toLocaleString()} • Start:{' '}
+                        {monthLabel(rental.startMonth)}
                       </div>
-                    )}
+                      {rental.nextPaymentDate && (
+                        <div className="mt-1 text-xs text-slate-500">
+                          Next payment date: {new Date(rental.nextPaymentDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <button

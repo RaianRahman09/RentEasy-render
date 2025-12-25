@@ -69,3 +69,5 @@ Frontend runs at `http://localhost:5173` (Vite dev server).
 ## Common adjustments
 - If ports conflict, update `server/.env` `PORT` and `client` API base URL (see `client/src/api/axios.js`).
 - For production, build the frontend (`npm run build` in `client`) and deploy frontend/backend separately.
+
+To start stripe, in server: stripe listen --forward-to http://localhost:5001/payments/stripe/webhook

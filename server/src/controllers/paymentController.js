@@ -18,14 +18,23 @@ const normalizeMonths = (months) => {
   return unique.sort();
 };
 
-const calculateTotals = ({ rentPrice, serviceCharge, monthsCount, penaltyAmount }) => {
-  const normalizedServiceCharge = Number(serviceCharge || 0);
+const calculateTotals = ({ rentPrice, serviceChargePerMonth, monthsCount, penaltyAmount }) => {
+  const normalizedServiceCharge = Number(serviceChargePerMonth || 0);
   const rentSubtotal = rentPrice * monthsCount;
-  const base = rentSubtotal + normalizedServiceCharge + penaltyAmount;
+  const serviceChargeTotal = normalizedServiceCharge * monthsCount;
+  const base = rentSubtotal + serviceChargeTotal + penaltyAmount;
   const tax = Math.round(base * 0.05);
   const platformFee = Math.round(base * 0.02);
   const total = base + tax + platformFee;
-  return { rentSubtotal, tax, platformFee, total };
+  return {
+    rentSubtotal,
+    serviceCharge: serviceChargeTotal,
+    serviceChargeTotal,
+    serviceChargePerMonth: normalizedServiceCharge,
+    tax,
+    platformFee,
+    total,
+  };
 };
 
 const collectPaymentMonths = (payments = []) => {
@@ -174,16 +183,17 @@ exports.createPaymentIntent = async (req, res) => {
       }
     }
 
-    const serviceCharge = Number(listing.serviceCharge || 0);
+    const serviceChargePerMonth = Number(listing.serviceCharge || 0);
+    const monthsCount = normalizedMonths.length;
 
-    if (!normalizedMonths.length && !penaltyAmount) {
+    if (!monthsCount && !penaltyAmount) {
       return res.status(400).json({ message: 'Please select at least one month to pay.' });
     }
 
-    const { rentSubtotal, tax, platformFee, total } = calculateTotals({
+    const { rentSubtotal, serviceChargeTotal, tax, platformFee, total } = calculateTotals({
       rentPrice: listing.rent,
-      serviceCharge,
-      monthsCount: normalizedMonths.length,
+      serviceChargePerMonth,
+      monthsCount,
       penaltyAmount,
     });
 
@@ -208,7 +218,8 @@ exports.createPaymentIntent = async (req, res) => {
       listingId: rental.listingId,
       monthsPaid: normalizedMonths,
       rentSubtotal,
-      serviceCharge,
+      serviceCharge: serviceChargeTotal,
+      serviceChargePerMonth,
       tax,
       platformFee,
       penaltyAmount,
@@ -224,7 +235,9 @@ exports.createPaymentIntent = async (req, res) => {
       paymentId: payment._id,
       total,
       rentSubtotal,
-      serviceCharge,
+      serviceCharge: serviceChargeTotal,
+      serviceChargePerMonth,
+      serviceChargeTotal,
       tax,
       platformFee,
       penaltyAmount,

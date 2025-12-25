@@ -185,9 +185,11 @@ const BookingPaymentPage = () => {
     setSelectedMonths(merged);
   };
 
-  const rentSubtotal = listing ? listing.rent * selectedMonths.length : 0;
-  const serviceCharge = listing?.serviceCharge || 0;
-  const base = rentSubtotal + serviceCharge + penaltyAmount;
+  const monthsCount = selectedMonths.length;
+  const rentSubtotal = listing ? listing.rent * monthsCount : 0;
+  const serviceChargePerMonth = Number(listing?.serviceCharge || 0);
+  const serviceChargeTotal = serviceChargePerMonth * monthsCount;
+  const base = rentSubtotal + serviceChargeTotal + penaltyAmount;
   const tax = Math.round(base * 0.05);
   const platformFee = Math.round(base * 0.02);
   const total = base + tax + platformFee;
@@ -396,8 +398,11 @@ const BookingPaymentPage = () => {
                 <span className="font-semibold text-slate-900">{formatCurrency(rentSubtotal)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Service charge</span>
-                <span className="font-semibold text-slate-900">{formatCurrency(serviceCharge)}</span>
+                <span>
+                  Service charge ({formatCurrency(serviceChargePerMonth)} x {monthsCount}{' '}
+                  {monthsCount === 1 ? 'month' : 'months'}) =
+                </span>
+                <span className="font-semibold text-slate-900">{formatCurrency(serviceChargeTotal)}</span>
               </div>
               {penaltyAmount > 0 && (
                 <div className="flex items-center justify-between">

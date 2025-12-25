@@ -34,25 +34,48 @@ const collectPaymentMonths = (payments = []) => {
   return { paidMonths, blockedMonths, processingMonths };
 };
 
-const buildListingSummary = (listing) => ({
-  _id: listing._id,
-  title: listing.title,
-  address: listing.address,
-  rent: listing.rent,
-  serviceCharge: Number(listing.serviceCharge || 0),
-  rentStartMonth: listing.rentStartMonth,
-  photos: listing.photos || [],
-  roomType: listing.roomType,
-});
+const resolveListingImages = (listing) => {
+  if (Array.isArray(listing.images) && listing.images.length) return listing.images;
+  if (Array.isArray(listing.imageUrls) && listing.imageUrls.length) return listing.imageUrls;
+  if (Array.isArray(listing.photos) && listing.photos.length) return listing.photos;
+  return [];
+};
 
-const calculateTotals = ({ rentPrice, serviceCharge, monthsCount, fineAmount }) => {
-  const normalizedServiceCharge = Number(serviceCharge || 0);
+const buildListingSummary = (listing) => {
+  const images = resolveListingImages(listing);
+  return {
+    _id: listing._id,
+    title: listing.title,
+    address: listing.address,
+    location: listing.location,
+    rent: listing.rent,
+    rentPrice: listing.rent,
+    serviceCharge: Number(listing.serviceCharge || 0),
+    rentStartMonth: listing.rentStartMonth,
+    photos: listing.photos || [],
+    images,
+    listingThumbnail: images[0] || null,
+    roomType: listing.roomType,
+  };
+};
+
+const calculateTotals = ({ rentPrice, serviceChargePerMonth, monthsCount, fineAmount }) => {
+  const normalizedServiceCharge = Number(serviceChargePerMonth || 0);
   const rentSubtotal = rentPrice * monthsCount;
-  const base = rentSubtotal + normalizedServiceCharge + fineAmount;
+  const serviceChargeTotal = normalizedServiceCharge * monthsCount;
+  const base = rentSubtotal + serviceChargeTotal + fineAmount;
   const tax = Math.round(base * 0.05);
   const platformFee = Math.round(base * 0.02);
   const total = base + tax + platformFee;
-  return { rentSubtotal, serviceCharge: normalizedServiceCharge, tax, platformFee, total };
+  return {
+    rentSubtotal,
+    serviceCharge: serviceChargeTotal,
+    serviceChargeTotal,
+    serviceChargePerMonth: normalizedServiceCharge,
+    tax,
+    platformFee,
+    total,
+  };
 };
 
 const computeMoveOutDue = async (rental, listing) => {
@@ -297,7 +320,7 @@ exports.getMoveOutDue = async (req, res) => {
 
     const breakdown = calculateTotals({
       rentPrice: listing.rent,
-      serviceCharge: listing.serviceCharge,
+      serviceChargePerMonth: listing.serviceCharge,
       monthsCount: due.dueMonths.length,
       fineAmount: due.fineAmount,
     });

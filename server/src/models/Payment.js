@@ -10,6 +10,7 @@ const PaymentSchema = new mongoose.Schema(
     monthsPaid: [{ type: String, match: MONTH_REGEX }],
     rentSubtotal: { type: Number, required: true },
     serviceCharge: { type: Number, required: true },
+    serviceChargePerMonth: { type: Number },
     tax: { type: Number, required: true },
     platformFee: { type: Number, required: true },
     penaltyAmount: { type: Number, default: 0 },

@@ -29,15 +29,21 @@ import BookingPaymentPage from './pages/BookingPaymentPage';
 import TenantPaymentsPage from './pages/TenantPaymentsPage';
 import ChatPage from './pages/ChatPage';
 import { ChatProvider } from './context/ChatContext';
+import { SupportProvider } from './context/SupportContext';
+import SupportCenterPage from './pages/SupportCenterPage';
+import SupportTicketDetailPage from './pages/SupportTicketDetailPage';
+import AdminSupportInbox from './pages/AdminSupportInbox';
+import LandlordSupportInbox from './pages/LandlordSupportInbox';
 
 const App = () => {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <NotificationProvider>
-          <ChatProvider>
-            <Layout>
-              <Routes>
+        <ChatProvider>
+          <NotificationProvider>
+            <SupportProvider>
+              <Layout>
+                <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/find" element={<FindPropertiesPage />} />
               <Route path="/auth/login" element={<LoginPage />} />
@@ -198,16 +204,48 @@ const App = () => {
               />
 
               <Route path="/how-it-works" element={<InfoPage title="How It Works">Content coming soon.</InfoPage>} />
-              <Route path="/support" element={<InfoPage title="Support">Create tickets coming soon.</InfoPage>} />
+              <Route
+                path="/support"
+                element={
+                  <ProtectedRoute roles={['tenant']}>
+                    <SupportCenterPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/support/tickets/:id"
+                element={
+                  <ProtectedRoute roles={['tenant', 'landlord', 'admin']}>
+                    <SupportTicketDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/support"
+                element={
+                  <ProtectedRoute roles={['admin']}>
+                    <AdminSupportInbox />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/dashboard/landlord/support"
+                element={
+                  <ProtectedRoute roles={['landlord']}>
+                    <LandlordSupportInbox />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="/about" element={<InfoPage title="About Us">Platform info.</InfoPage>} />
               <Route path="/privacy" element={<InfoPage title="Privacy Policy">Privacy details.</InfoPage>} />
               <Route path="/terms" element={<InfoPage title="Terms of Service">Terms details.</InfoPage>} />
 
               <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Layout>
-          </ChatProvider>
-        </NotificationProvider>
+                </Routes>
+              </Layout>
+            </SupportProvider>
+          </NotificationProvider>
+        </ChatProvider>
       </AuthProvider>
     </BrowserRouter>
   );

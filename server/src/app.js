@@ -14,6 +14,7 @@ const rentalRoutes = require('./routes/rentalRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 const paymentController = require('./controllers/paymentController');
 
 const app = express();
@@ -43,6 +44,7 @@ app.use('/api', rentalRoutes);
 app.use('/api', paymentRoutes);
 app.use('/api', conversationRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api', ticketRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error', err);

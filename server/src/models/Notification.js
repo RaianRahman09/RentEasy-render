@@ -4,6 +4,7 @@ const NotificationSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    role: { type: String, enum: ['tenant', 'landlord', 'admin'] },
     type: {
       type: String,
       enum: [
@@ -17,6 +18,9 @@ const NotificationSchema = new mongoose.Schema(
         'APPOINTMENT_RESCHEDULED',
         'APPOINTMENT_REMINDER',
         'RENTAL',
+        'ticket_created',
+        'ticket_reply',
+        'ticket_status',
       ],
       required: true,
     },

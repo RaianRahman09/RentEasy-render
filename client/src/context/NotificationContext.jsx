@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchNotifications, fetchUnreadCount, markAllRead, markOneRead } from '../api/notifications';
 import { useAuth } from './AuthContext';
+import { useChat } from './ChatContext';
 
 const NotificationContext = createContext();
 
@@ -9,6 +10,7 @@ const POLL_INTERVAL_MS = 25000;
 
 export const NotificationProvider = ({ children }) => {
   const { user } = useAuth();
+  const { socket } = useChat();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -138,6 +140,17 @@ export const NotificationProvider = ({ children }) => {
       }
     };
   }, [user, resetState, loadUnreadCount]);
+
+  useEffect(() => {
+    if (!socket || !user) return undefined;
+    const handleNotification = (notification) => {
+      handleIncomingNotification(notification);
+    };
+    socket.on('notification:new', handleNotification);
+    return () => {
+      socket.off('notification:new', handleNotification);
+    };
+  }, [socket, user, handleIncomingNotification]);
 
   const value = useMemo(
     () => ({

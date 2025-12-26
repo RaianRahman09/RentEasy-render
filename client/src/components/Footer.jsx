@@ -1,8 +1,16 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 const Footer = () => {
+  const { user } = useAuth();
   const year = new Date().getFullYear();
+  const supportPath =
+    user?.role === 'admin'
+      ? '/admin/support'
+      : user?.role === 'landlord'
+      ? '/dashboard/landlord/support'
+      : '/support';
   return (
     <footer className="border-t border-[var(--border)] bg-[var(--surface)]">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-6 text-sm text-[var(--muted)] md:flex-row">
@@ -17,7 +25,7 @@ const Footer = () => {
           <Link to="/about" className="hover:text-[var(--primary)]">
             About Us
           </Link>
-          <Link to="/support" className="hover:text-[var(--primary)]">
+          <Link to={supportPath} className="hover:text-[var(--primary)]">
             Contact Support
           </Link>
           <Link to="/privacy" className="hover:text-[var(--primary)]">

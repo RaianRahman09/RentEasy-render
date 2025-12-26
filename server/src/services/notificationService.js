@@ -76,7 +76,7 @@ const notifyTenantsForListing = async (listing) => {
   );
 };
 
-const createNotification = async ({ userId, actorId, type, title, body, link, metadata } = {}) => {
+const createNotification = async ({ userId, actorId, role, type, title, body, link, metadata } = {}) => {
   const missing = [];
   if (!userId) missing.push('userId');
   if (!type) missing.push('type');
@@ -91,6 +91,7 @@ const createNotification = async ({ userId, actorId, type, title, body, link, me
   const notification = await Notification.create({
     userId,
     actorId,
+    role,
     type,
     title,
     body,

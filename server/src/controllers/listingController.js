@@ -1,6 +1,7 @@
 const Listing = require('../models/Listing');
 const Rental = require('../models/Rental');
 const cloudinary = require('../utils/cloudinary');
+const { destroyCloudinaryAssets } = require('../utils/cloudinaryAssets');
 const { notifyTenantsForListing } = require('../services/notificationService');
 
 const RENT_START_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -555,5 +556,28 @@ exports.updateListing = async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'Failed to update listing', error: err.message });
+  }
+};
+
+exports.deleteListing = async (req, res) => {
+  try {
+    const listing = await Listing.findOne({ _id: req.params.id, owner: req.user.id });
+    if (!listing) return res.status(404).json({ message: 'Listing not found' });
+
+    const activeRental = await Rental.findOne({ listingId: listing._id, status: 'active' }).select('_id');
+    if (activeRental) {
+      return res.status(400).json({ message: 'Rented property can not be deleted' });
+    }
+
+    const images = resolveListingImages(listing);
+    if (images.length) {
+      await destroyCloudinaryAssets(images);
+    }
+
+    await listing.deleteOne();
+    return res.json({ message: 'Listing deleted' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Failed to delete listing' });
   }
 };

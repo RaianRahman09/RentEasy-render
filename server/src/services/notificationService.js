@@ -76,9 +76,22 @@ const notifyTenantsForListing = async (listing) => {
   );
 };
 
-const createNotification = async ({ userId, actorId, role, type, title, body, link, metadata } = {}) => {
+const createNotification = async ({
+  userId,
+  receiverId,
+  actorId,
+  role,
+  type,
+  eventType,
+  eventId,
+  title,
+  body,
+  link,
+  metadata,
+} = {}) => {
   const missing = [];
-  if (!userId) missing.push('userId');
+  const resolvedReceiverId = receiverId || userId;
+  if (!resolvedReceiverId) missing.push('userId');
   if (!type) missing.push('type');
   if (!title) missing.push('title');
   if (!link) missing.push('link');
@@ -88,18 +101,49 @@ const createNotification = async ({ userId, actorId, role, type, title, body, li
     throw err;
   }
 
-  const notification = await Notification.create({
-    userId,
+  const normalizedEventType = eventType || type;
+  const normalizedEventId = eventId === null || typeof eventId === 'undefined' ? null : String(eventId);
+  const dedupeKey =
+    normalizedEventType && normalizedEventId && resolvedReceiverId
+      ? `${normalizedEventType}:${resolvedReceiverId}:${normalizedEventId}`
+      : null;
+
+  const payload = {
+    userId: resolvedReceiverId,
+    receiverId: resolvedReceiverId,
     actorId,
     role,
     type,
+    eventType: normalizedEventType,
+    eventId: normalizedEventId,
+    dedupeKey,
     title,
     body,
     link,
     metadata,
-  });
+  };
 
-  return notification;
+  if (!dedupeKey) {
+    const notification = await Notification.create(payload);
+    return { notification, created: true };
+  }
+
+  try {
+    const result = await Notification.findOneAndUpdate(
+      { dedupeKey },
+      { $setOnInsert: payload },
+      { upsert: true, new: true, rawResult: true, setDefaultsOnInsert: true }
+    );
+    const notification = result?.value || null;
+    const created = !result?.lastErrorObject?.updatedExisting;
+    return { notification, created };
+  } catch (err) {
+    if (err.code === 11000) {
+      const existing = await Notification.findOne({ dedupeKey });
+      return { notification: existing, created: false };
+    }
+    throw err;
+  }
 };
 
 module.exports = { notifyTenantsForListing, createNotification };

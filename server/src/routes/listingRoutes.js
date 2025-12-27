@@ -11,6 +11,7 @@ const {
   searchListings,
   searchListingsByLocation,
   getListingsInBounds,
+  deleteListing,
 } = require('../controllers/listingController');
 
 const router = express.Router();
@@ -27,5 +28,6 @@ router.get('/', auth, requireRole('landlord'), getMyListings);
 router.get('/:id/owner', auth, requireRole('landlord'), getListingByIdForOwner);
 router.post('/', auth, requireRole('landlord'), upload.array('photos', 5), createListing);
 router.put('/:id', auth, requireRole('landlord'), upload.array('photos', 5), updateListing);
+router.delete('/:id', auth, requireRole('landlord'), deleteListing);
 
 module.exports = router;

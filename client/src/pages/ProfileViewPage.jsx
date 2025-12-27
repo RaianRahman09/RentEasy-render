@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { applyTheme, getInitialTheme, toggleTheme } from '../theme/theme';
+import ConfirmModal from '../components/ConfirmModal';
 
 const ProfileViewPage = () => {
-  const { user, setUser } = useAuth();
+  const { setUser, logout } = useAuth();
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [status, setStatus] = useState(null);
   const [theme, setTheme] = useState(() => getInitialTheme());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -29,6 +34,21 @@ const ProfileViewPage = () => {
     const nextTheme = toggleTheme(theme);
     setTheme(nextTheme);
     applyTheme(nextTheme);
+  };
+
+  const handleDeleteProfile = async () => {
+    setDeleting(true);
+    try {
+      await api.delete('/me');
+      await logout();
+      toast.success('Profile deleted.');
+      navigate('/');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete profile.');
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
   };
 
   return (
@@ -101,6 +121,19 @@ const ProfileViewPage = () => {
             <p className="text-sm text-[var(--muted)]">Keep your account secure and monitor activity.</p>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)]">
+            <div className="text-sm font-semibold text-[var(--text)]">Delete Profile</div>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Permanently remove your account when you are no longer renting or hosting.
+            </p>
+            <button
+              type="button"
+              onClick={() => setDeleteOpen(true)}
+              className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+            >
+              Delete profile
+            </button>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)]">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="text-sm font-semibold text-[var(--text)]">Theme</div>
@@ -124,6 +157,18 @@ const ProfileViewPage = () => {
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={deleteOpen}
+        title="Delete profile"
+        description="Are you sure you want to delete your profile?"
+        confirmText={deleting ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        danger
+        loading={deleting}
+        confirmPhrase="DELETE"
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={handleDeleteProfile}
+      />
     </div>
   );
 };

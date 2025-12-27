@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
+import ConfirmModal from '../components/ConfirmModal';
 
 const StatusBadge = ({ status }) => (
   <span
@@ -17,6 +18,8 @@ const MyListingsPage = () => {
   const [listings, setListings] = useState([]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
+  const [confirmListing, setConfirmListing] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -46,6 +49,21 @@ const MyListingsPage = () => {
       load();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update listing status.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirmListing?._id) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/listings/${confirmListing._id}`);
+      setListings((prev) => prev.filter((listing) => listing._id !== confirmListing._id));
+      toast.success('Listing deleted.');
+      setConfirmListing(null);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to delete listing.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -103,6 +121,9 @@ const MyListingsPage = () => {
                   <Link to={`/listing/${l._id}`} className="text-slate-700">
                     View
                   </Link>
+                  <button onClick={() => setConfirmListing(l)} className="text-red-600">
+                    Delete
+                  </button>
                   {l.status === 'active' ? (
                     <button onClick={() => updateStatus(l._id, 'archived')} className="text-red-600">
                       Archive
@@ -132,6 +153,17 @@ const MyListingsPage = () => {
           </tbody>
         </table>
       </div>
+      <ConfirmModal
+        open={Boolean(confirmListing)}
+        title="Delete property"
+        description="Are you sure you want to delete this property?"
+        confirmText={deleting ? 'Deleting...' : 'Delete'}
+        cancelText="Cancel"
+        danger
+        loading={deleting}
+        onCancel={() => setConfirmListing(null)}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 };

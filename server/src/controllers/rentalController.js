@@ -92,7 +92,7 @@ const computeMoveOutDue = async (rental, listing) => {
     rentalId: rental._id,
     status: { $in: ['succeeded', 'processing'] },
   });
-  await reconcileProcessingPayments(payments);
+  await reconcileProcessingPayments(payments, { notify: false });
   const activePayments = payments.filter((payment) => ['succeeded', 'processing'].includes(payment.status));
   const { paidMonths, blockedMonths, processingMonths } = collectPaymentMonths(activePayments);
 
@@ -142,7 +142,7 @@ exports.startRental = async (req, res) => {
       rentalId: rental._id,
       status: { $in: ['succeeded', 'processing'] },
     });
-    await reconcileProcessingPayments(payments);
+    await reconcileProcessingPayments(payments, { notify: false });
     const activePayments = payments.filter((payment) => ['succeeded', 'processing'].includes(payment.status));
     const { paidMonths, blockedMonths } = collectPaymentMonths(activePayments);
     const nextMonth = nextUnpaidMonth(rental.startMonth, blockedMonths);
@@ -176,7 +176,7 @@ exports.getRentalById = async (req, res) => {
       rentalId: rental._id,
       status: { $in: ['succeeded', 'processing'] },
     });
-    await reconcileProcessingPayments(payments);
+    await reconcileProcessingPayments(payments, { notify: false });
     const activePayments = payments.filter((payment) => ['succeeded', 'processing'].includes(payment.status));
     const { paidMonths, blockedMonths } = collectPaymentMonths(activePayments);
     const nextMonth = nextUnpaidMonth(rental.startMonth, blockedMonths);
@@ -268,6 +268,8 @@ exports.giveMoveOutNotice = async (req, res) => {
         userId: rental.landlordId,
         actorId: rental.tenantId,
         type: 'RENTAL',
+        eventType: 'MOVE_OUT_NOTICE',
+        eventId: `${rental._id}:${moveOutMonth}`,
         title: 'Move-out notice received',
         body: `${tenant?.name || 'A tenant'} will leave ${listingTitle} in ${moveOutLabel}.`,
         link: '/landlord/listings',
@@ -410,6 +412,8 @@ exports.leaveRental = async (req, res) => {
         userId: rental.landlordId,
         actorId: rental.tenantId,
         type: 'RENTAL',
+        eventType: 'RENTAL_ENDED',
+        eventId: rental._id,
         title: 'Tenant left property',
         body: `${tenant?.name || 'A tenant'} has left ${listing.title || 'your listing'}.`,
         link: '/landlord/listings',
@@ -453,6 +457,8 @@ exports.stopRental = async (req, res) => {
         await createNotification({
           userId: req.user.id,
           type: 'PAYMENT',
+          eventType: 'RENTAL_DUE',
+          eventId: `${rental._id}:${dueMonths.join(',')}`,
           title: 'Rent due before move-out',
           body: `Please clear due rent for ${dueMonths.join(', ')} before leaving.`,
           link: '/dashboard/tenant',
@@ -485,6 +491,8 @@ exports.stopRental = async (req, res) => {
         await createNotification({
           userId: req.user.id,
           type: 'PAYMENT',
+          eventType: 'MOVE_OUT_CONFIRMED',
+          eventId: `${rental._id}:${moveOutMonth}`,
           title: 'Move-out confirmed',
           body: `Your rental has been ended for ${moveOutMonth}.`,
           link: '/dashboard/tenant',

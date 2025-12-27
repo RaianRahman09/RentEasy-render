@@ -15,7 +15,7 @@ const extractReceiptUrl = async (paymentIntent) => {
   return null;
 };
 
-const finalizeSucceededPayment = async (payment, paymentIntent) => {
+const finalizeSucceededPayment = async (payment, paymentIntent, options = {}) => {
   if (payment.status === 'succeeded') return payment;
   payment.status = 'succeeded';
   payment.paidAt = new Date();
@@ -37,71 +37,81 @@ const finalizeSucceededPayment = async (payment, paymentIntent) => {
     await listing.save();
   }
 
-  try {
-    const listingTitle = listing?.title || 'listing';
-    await createNotification({
-      userId: payment.tenantId,
-      type: 'PAYMENT',
-      title: 'Payment successful',
-      body: `Your rent payment for ${listingTitle} was successful.`,
-      link: '/dashboard/tenant',
-      metadata: { paymentId: payment._id },
-    });
-    await createNotification({
-      userId: payment.landlordId,
-      type: 'PAYMENT',
-      title: 'Rent payment received',
-      body: `A tenant paid rent for ${listingTitle}.`,
-      link: '/dashboard/landlord/payments',
-      metadata: { paymentId: payment._id },
-    });
-  } catch (notifyErr) {
-    console.error('Failed to send payment notifications', notifyErr);
+  if (options.notify !== false) {
+    try {
+      const listingTitle = listing?.title || 'listing';
+      await createNotification({
+        userId: payment.tenantId,
+        eventType: 'PAYMENT_SUCCEEDED',
+        eventId: payment._id,
+        type: 'PAYMENT',
+        title: 'Payment successful',
+        body: `Your rent payment for ${listingTitle} was successful.`,
+        link: '/dashboard/tenant',
+        metadata: { paymentId: payment._id },
+      });
+      await createNotification({
+        userId: payment.landlordId,
+        eventType: 'PAYMENT_SUCCEEDED',
+        eventId: payment._id,
+        type: 'PAYMENT',
+        title: 'Rent payment received',
+        body: `A tenant paid rent for ${listingTitle}.`,
+        link: '/dashboard/landlord/payments',
+        metadata: { paymentId: payment._id },
+      });
+    } catch (notifyErr) {
+      console.error('Failed to send payment notifications', notifyErr);
+    }
   }
 
   return payment;
 };
 
-const finalizeFailedPayment = async (payment, paymentIntent) => {
+const finalizeFailedPayment = async (payment, paymentIntent, options = {}) => {
   if (payment.status === 'failed') return payment;
   payment.status = 'failed';
   payment.failureReason = paymentIntent?.last_payment_error?.message || payment.failureReason;
   await payment.save();
-  try {
-    await createNotification({
-      userId: payment.tenantId,
-      type: 'PAYMENT',
-      title: 'Payment failed',
-      body: 'Your payment could not be completed. Please try again.',
-      link: '/dashboard/tenant',
-      metadata: { paymentId: payment._id },
-    });
-  } catch (notifyErr) {
-    console.error('Failed to send payment failure notification', notifyErr);
+  if (options.notify !== false) {
+    try {
+      await createNotification({
+        userId: payment.tenantId,
+        eventType: 'PAYMENT_FAILED',
+        eventId: payment._id,
+        type: 'PAYMENT',
+        title: 'Payment failed',
+        body: 'Your payment could not be completed. Please try again.',
+        link: '/dashboard/tenant',
+        metadata: { paymentId: payment._id },
+      });
+    } catch (notifyErr) {
+      console.error('Failed to send payment failure notification', notifyErr);
+    }
   }
   return payment;
 };
 
-const reconcilePayment = async (payment) => {
+const reconcilePayment = async (payment, options = {}) => {
   if (!payment?.stripePaymentIntentId || payment.status !== 'processing') return payment;
   const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId, {
     expand: ['charges.data'],
   });
   if (paymentIntent.status === 'succeeded') {
-    return finalizeSucceededPayment(payment, paymentIntent);
+    return finalizeSucceededPayment(payment, paymentIntent, options);
   }
   if (['requires_payment_method', 'canceled'].includes(paymentIntent.status)) {
-    return finalizeFailedPayment(payment, paymentIntent);
+    return finalizeFailedPayment(payment, paymentIntent, options);
   }
   return payment;
 };
 
-const reconcileProcessingPayments = async (payments = []) => {
+const reconcileProcessingPayments = async (payments = [], options = {}) => {
   const processing = payments.filter((payment) => payment.status === 'processing' && payment.stripePaymentIntentId);
   if (!processing.length) return payments;
   await Promise.all(
     processing.map((payment) =>
-      reconcilePayment(payment).catch((err) => {
+      reconcilePayment(payment, options).catch((err) => {
         console.error('Failed to reconcile payment', payment._id, err.message || err);
         return payment;
       })

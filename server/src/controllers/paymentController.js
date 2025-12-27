@@ -101,7 +101,7 @@ exports.createPaymentIntent = async (req, res) => {
         rentalId: rental._id,
         status: { $in: ['succeeded', 'processing'] },
       });
-      await reconcileProcessingPayments(payments);
+      await reconcileProcessingPayments(payments, { notify: false });
       const activePayments = payments.filter((payment) => ['succeeded', 'processing'].includes(payment.status));
       const { paidMonths, processingMonths } = collectPaymentMonths(activePayments);
 
@@ -141,7 +141,7 @@ exports.createPaymentIntent = async (req, res) => {
         rentalId: rental._id,
         status: { $in: ['succeeded', 'processing'] },
       });
-      await reconcileProcessingPayments(payments);
+      await reconcileProcessingPayments(payments, { notify: false });
       const activePayments = payments.filter((payment) => ['succeeded', 'processing'].includes(payment.status));
       const { paidMonths, blockedMonths } = collectPaymentMonths(activePayments);
       const expectedStart = nextUnpaidMonth(rental.startMonth, blockedMonths);
@@ -298,7 +298,7 @@ exports.getTenantPayments = async (req, res) => {
       status: 'processing',
       stripePaymentIntentId: { $exists: true },
     });
-    await reconcileProcessingPayments(processingPayments);
+    await reconcileProcessingPayments(processingPayments, { notify: false });
 
     const payments = await Payment.find(query)
       .populate('listingId', 'title address')
@@ -328,7 +328,7 @@ exports.getLandlordPayments = async (req, res) => {
       status: 'processing',
       stripePaymentIntentId: { $exists: true },
     });
-    await reconcileProcessingPayments(processingPayments);
+    await reconcileProcessingPayments(processingPayments, { notify: false });
 
     const payments = await Payment.find(query)
       .populate('listingId', 'title')
@@ -396,9 +396,9 @@ exports.getPaymentStatus = async (req, res) => {
       expand: ['charges.data'],
     });
     if (paymentIntent.status === 'succeeded') {
-      await finalizeSucceededPayment(payment, paymentIntent);
+      await finalizeSucceededPayment(payment, paymentIntent, { notify: false });
     } else if (['requires_payment_method', 'canceled'].includes(paymentIntent.status)) {
-      await finalizeFailedPayment(payment, paymentIntent);
+      await finalizeFailedPayment(payment, paymentIntent, { notify: false });
     }
 
     return res.json({ status: payment.status });

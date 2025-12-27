@@ -150,11 +150,13 @@ exports.createTicket = async (req, res) => {
       text: trimmedDescription,
     });
 
-    const notification = await createNotification({
+    const { notification, created } = await createNotification({
       userId: assignedToUserId,
       actorId: req.user.id,
       role: assignedToRole,
       type: 'ticket_created',
+      eventType: 'TICKET_CREATED',
+      eventId: ticket._id,
       title: 'New support ticket',
       body: trimmedSubject,
       link: `/support/tickets/${ticket._id}`,
@@ -166,7 +168,9 @@ exports.createTicket = async (req, res) => {
       io.to(`user:${assignedToUserId}`).emit('ticket:new', {
         ticket: toTicketSummary(ticket, assignedToRole),
       });
-      io.to(`user:${assignedToUserId}`).emit('notification:new', notification);
+      if (created && notification) {
+        io.to(`user:${assignedToUserId}`).emit('notification:new', notification);
+      }
       await emitUnreadUpdate({ userId: assignedToUserId, role: assignedToRole });
     }
 
@@ -257,11 +261,13 @@ exports.addMessage = async (req, res) => {
       { new: true }
     );
 
-    const notification = await createNotification({
+    const { notification, created } = await createNotification({
       userId: recipientId,
       actorId: req.user.id,
       role: recipientRole,
       type: 'ticket_reply',
+      eventType: 'TICKET_REPLY',
+      eventId: message._id,
       title: `New reply on ${ticket.subject}`,
       body: trimmedText.slice(0, 120),
       link: `/support/tickets/${ticket._id}`,
@@ -271,7 +277,9 @@ exports.addMessage = async (req, res) => {
     const io = getIO();
     if (io) {
       io.to(`user:${recipientId}`).emit('ticket:message:new', { ticketId: ticket._id, message });
-      io.to(`user:${recipientId}`).emit('notification:new', notification);
+      if (created && notification) {
+        io.to(`user:${recipientId}`).emit('notification:new', notification);
+      }
       await emitUnreadUpdate({ userId: recipientId, role: recipientRole });
     }
 
@@ -339,11 +347,13 @@ exports.updateStatus = async (req, res) => {
       { new: true }
     );
 
-    const notification = await createNotification({
+    const { notification, created } = await createNotification({
       userId: updated.createdBy,
       actorId: req.user.id,
       role: 'tenant',
       type: 'ticket_status',
+      eventType: 'TICKET_STATUS_CHANGED',
+      eventId: `${updated._id}:${nextStatus}`,
       title: `Your ticket status changed to ${nextStatus.replace('_', ' ')}`,
       body: updated.subject,
       link: `/support/tickets/${updated._id}`,
@@ -352,7 +362,9 @@ exports.updateStatus = async (req, res) => {
 
     const io = getIO();
     if (io) {
-      io.to(`user:${updated.createdBy}`).emit('notification:new', notification);
+      if (created && notification) {
+        io.to(`user:${updated.createdBy}`).emit('notification:new', notification);
+      }
       await emitUnreadUpdate({ userId: updated.createdBy, role: 'tenant' });
     }
 

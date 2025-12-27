@@ -103,8 +103,11 @@ export const NotificationProvider = ({ children }) => {
 
   const handleIncomingNotification = useCallback((notification) => {
     if (!notification) return;
-    setNotifications((prev) => [notification, ...prev]);
-    setUnreadCount((prev) => prev + 1);
+    setNotifications((prev) => {
+      if (prev.some((item) => item._id === notification._id)) return prev;
+      setUnreadCount((count) => count + 1);
+      return [notification, ...prev];
+    });
   }, []);
 
   const openDropdown = useCallback(() => {

@@ -4,7 +4,11 @@ const NotificationSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     actorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    receiverId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     role: { type: String, enum: ['tenant', 'landlord', 'admin'] },
+    eventType: { type: String },
+    eventId: { type: String },
+    dedupeKey: { type: String },
     type: {
       type: String,
       enum: [
@@ -35,5 +39,12 @@ const NotificationSchema = new mongoose.Schema(
 
 NotificationSchema.index({ userId: 1, createdAt: -1 });
 NotificationSchema.index({ userId: 1, isRead: 1 });
+NotificationSchema.index(
+  { dedupeKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { dedupeKey: { $exists: true, $type: 'string' } },
+  }
+);
 
 module.exports = mongoose.model('Notification', NotificationSchema);

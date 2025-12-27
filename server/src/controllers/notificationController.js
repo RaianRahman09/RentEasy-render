@@ -115,11 +115,21 @@ exports.createDevNotification = async (req, res) => {
   }
 
   try {
-    const { type = 'SUPPORT', title = 'Test notification', body = '', link = '/', metadata } = req.body || {};
-    const notification = await createNotification({
+    const {
+      type = 'SUPPORT',
+      title = 'Test notification',
+      body = '',
+      link = '/',
+      metadata,
+      eventType,
+      eventId,
+    } = req.body || {};
+    const { notification } = await createNotification({
       userId: req.user.id,
       actorId: req.user.id,
       type,
+      eventType: eventType || 'DEV_NOTIFICATION',
+      eventId: eventId || `${req.user.id}:${Date.now()}`,
       title,
       body,
       link,

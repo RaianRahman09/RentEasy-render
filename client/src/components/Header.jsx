@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
 import { useSupport } from '../context/SupportContext';
 import NotificationBell from './NotificationBell';
+import logo from '../assets/renteasy-logo.png';
 
 const navLinkClass = ({ isActive }) =>
   `text-sm font-medium transition-colors ${
@@ -25,9 +26,9 @@ const Header = () => {
   return (
     <header className="border-b border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link to="/" className="flex items-center gap-2 text-lg font-semibold text-[var(--primary)]">
-          <span className="rounded-lg bg-[var(--surface-2)] px-2 py-1">🏠</span>
-          RentEasy
+        <Link to="/" className="flex items-center gap-3 text-lg font-semibold text-[var(--primary)]">
+          <img src={logo} alt="RentEasy" className="h-8 w-auto sm:h-9 md:h-10" />
+          <span className="hidden text-lg font-semibold text-[var(--primary)] sm:inline-block">RentEasy</span>
         </Link>
         <nav className="hidden items-center gap-6 md:flex">
           <NavLink to="/" className={navLinkClass}>

@@ -10,6 +10,7 @@ const FONT_CURRENCY_BOLD = 'NotoSansBengaliBold';
 const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 const FONT_CURRENCY_PATH = path.join(FONT_DIR, 'NotoSansBengali-Regular.ttf');
 const FONT_CURRENCY_BOLD_PATH = path.join(FONT_DIR, 'NotoSansBengali-Bold.ttf');
+const LOGO_PATH = path.join(__dirname, '..', '..', 'public', 'brand', 'renteasy-logo.png');
 
 const safeNumber = (value) => {
   const num = Number(value);
@@ -179,29 +180,43 @@ const generateReceiptPdf = ({ payment, tenant, landlord, listing, stream }) => {
   const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const leftX = doc.page.margins.left;
 
-  doc.font(FONT_BODY_BOLD).fontSize(22).fillColor('#0f172a');
-  doc.text('Rent Payment Receipt', { align: 'center' });
-  doc.moveDown(0.5);
+  const headerY = doc.y;
+  const logoWidth = 120;
+  let logoHeight = 0;
+  try {
+    const logo = doc.openImage(LOGO_PATH);
+    logoHeight = (logo.height / logo.width) * logoWidth;
+    doc.image(logo, leftX, headerY, { width: logoWidth });
+  } catch (err) {
+    logoHeight = 0;
+  }
+
+  const headerGap = 16;
+  const headerTextX = leftX + (logoHeight ? logoWidth + headerGap : 0);
+  const headerTextWidth = contentWidth - (logoHeight ? logoWidth + headerGap : 0);
+
+  doc.font(FONT_BODY_BOLD).fontSize(20).fillColor('#0f172a');
+  doc.text('Rent Payment Receipt', headerTextX, headerY, { width: headerTextWidth, align: 'right' });
+  const titleHeight = doc.heightOfString('Rent Payment Receipt', { width: headerTextWidth, align: 'right' });
+  const badgeHeight = drawStripeBadge(doc, {
+    x: headerTextX,
+    y: headerY + titleHeight + 4,
+    width: headerTextWidth,
+    paymentIntentId: payment?.stripePaymentIntentId,
+  });
+
+  doc.y = headerY + Math.max(logoHeight, titleHeight + badgeHeight) + 12;
 
   doc.font(FONT_BODY).fontSize(11).fillColor('#0f172a');
   const receiptInfo = `Receipt ID: ${safeText(payment?._id)}\nPayment date: ${formatDateTime(
     payment?.paidAt || payment?.createdAt
   )}`;
 
-  const infoLeftWidth = Math.floor(contentWidth * 0.6);
-  const infoRightWidth = contentWidth - infoLeftWidth;
   const infoY = doc.y;
+  doc.text(receiptInfo, leftX, infoY, { width: contentWidth, align: 'left' });
+  const infoHeight = doc.heightOfString(receiptInfo, { width: contentWidth });
 
-  doc.text(receiptInfo, leftX, infoY, { width: infoLeftWidth, align: 'left' });
-  const infoHeight = doc.heightOfString(receiptInfo, { width: infoLeftWidth });
-  const badgeHeight = drawStripeBadge(doc, {
-    x: leftX + infoLeftWidth,
-    y: infoY,
-    width: infoRightWidth,
-    paymentIntentId: payment?.stripePaymentIntentId,
-  });
-
-  doc.y = infoY + Math.max(infoHeight, badgeHeight) + 8;
+  doc.y = infoY + infoHeight + 8;
   drawRule(doc);
 
   doc.font(FONT_BODY_BOLD).fontSize(13).fillColor('#0f172a');

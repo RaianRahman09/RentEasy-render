@@ -13,6 +13,16 @@ const {
 } = require('../services/paymentService');
 
 const stripe = stripeSdk(process.env.STRIPE_SECRET_KEY || 'sk_test_missing');
+const STRIPE_CURRENCY = process.env.STRIPE_CURRENCY || 'bdt';
+const CURRENCY_MULTIPLIERS = {
+  bdt: 100,
+  usd: 100,
+};
+
+const toStripeAmount = (amount, currency) => {
+  const multiplier = CURRENCY_MULTIPLIERS[String(currency || '').toLowerCase()] || 100;
+  return Math.round(amount * multiplier);
+};
 
 const normalizeMonths = (months) => {
   const unique = Array.from(new Set(months.map((m) => String(m).trim())));
@@ -20,7 +30,7 @@ const normalizeMonths = (months) => {
 };
 
 const calculateTotals = ({ rentPrice, serviceChargePerMonth, monthsCount, penaltyAmount }) => {
-  const normalizedServiceCharge = Number(serviceChargePerMonth || 0);
+  const normalizedServiceCharge = Number(serviceChargePerMonth) || 0;
   const rentSubtotal = rentPrice * monthsCount;
   const serviceChargeTotal = normalizedServiceCharge * monthsCount;
   const base = rentSubtotal + serviceChargeTotal + penaltyAmount;
@@ -59,8 +69,11 @@ const collectPaymentMonths = (payments = []) => {
 
 exports.createPaymentIntent = async (req, res) => {
   try {
-    const { rentalId, selectedMonths = [], moveOutMonth, leaveFlow } = req.body;
+    const { rentalId, selectedMonths, moveOutMonth, leaveFlow, bookingId } = req.body;
     if (!rentalId) return res.status(400).json({ message: 'Rental id is required.' });
+    if (!Array.isArray(selectedMonths)) {
+      return res.status(400).json({ message: 'Selected months must be an array.' });
+    }
 
     const rental = await Rental.findOne({ _id: rentalId, tenantId: req.user.id, status: 'active' });
     if (!rental) return res.status(404).json({ message: 'Rental not found.' });
@@ -68,8 +81,11 @@ exports.createPaymentIntent = async (req, res) => {
     const listing = await Listing.findById(rental.listingId);
     if (!listing) return res.status(404).json({ message: 'Listing not found.' });
 
-    const incomingMonths = Array.isArray(selectedMonths) ? selectedMonths : [];
+    const incomingMonths = selectedMonths;
     const normalizedMonths = normalizeMonths(incomingMonths);
+    if (!normalizedMonths.length) {
+      return res.status(400).json({ message: 'Please select at least one month to pay.' });
+    }
     if (normalizedMonths.length !== incomingMonths.length) {
       return res.status(400).json({ message: 'Duplicate months selected.' });
     }
@@ -79,6 +95,8 @@ exports.createPaymentIntent = async (req, res) => {
     }
 
     const useLeaveFlow = Boolean(leaveFlow || moveOutMonth);
+    const rentPerMonth = Number(listing.rent);
+    const serviceChargePerMonth = Number(listing.serviceCharge) || 0;
     let penaltyAmount = 0;
     let effectiveMoveOutMonth = null;
 
@@ -107,7 +125,7 @@ exports.createPaymentIntent = async (req, res) => {
 
       const noticeMonth = rental.moveOutNoticeGivenAt ? currentMonth(rental.moveOutNoticeGivenAt) : currentMonth();
       const noticeValidMonth = addMonths(noticeMonth, 1);
-      penaltyAmount = compareMonths(effectiveMoveOutMonth, noticeValidMonth) < 0 ? listing.rent : 0;
+      penaltyAmount = compareMonths(effectiveMoveOutMonth, noticeValidMonth) < 0 ? rentPerMonth : 0;
 
       const nowMonth = currentMonth();
       const requiredPaidUntil =
@@ -184,33 +202,58 @@ exports.createPaymentIntent = async (req, res) => {
       }
     }
 
-    const serviceChargePerMonth = Number(listing.serviceCharge || 0);
     const monthsCount = normalizedMonths.length;
 
-    if (!monthsCount && !penaltyAmount) {
-      return res.status(400).json({ message: 'Please select at least one month to pay.' });
-    }
-
     const { rentSubtotal, serviceChargeTotal, tax, platformFee, total } = calculateTotals({
-      rentPrice: listing.rent,
+      rentPrice: rentPerMonth,
       serviceChargePerMonth,
       monthsCount,
       penaltyAmount,
     });
 
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return res.status(500).json({ message: 'Stripe is not configured.' });
+    const amountInSmallestUnit = toStripeAmount(total, STRIPE_CURRENCY);
+    console.log('[payments/create-intent] totals', {
+      listingId: listing._id?.toString(),
+      rentalId: rental._id?.toString(),
+      bookingId: bookingId ? String(bookingId) : null,
+      monthsRequested: normalizedMonths,
+      monthsCount,
+      currency: STRIPE_CURRENCY,
+      listingMonthlyRent: listing.rent,
+      listingServiceCharge: listing.serviceCharge,
+      rentSubtotal,
+      serviceChargeTotal,
+      tax,
+      platformFee,
+      totalDue: total,
+      amountForStripe: amountInSmallestUnit,
+    });
+
+    if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(amountInSmallestUnit) || amountInSmallestUnit <= 0) {
+      return res.status(400).json({ message: 'Payment total is invalid.', code: 'invalid_total' });
     }
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: total,
-      currency: 'bdt',
-      automatic_payment_methods: { enabled: true },
-      metadata: {
-        rentalId: rental._id.toString(),
-        tenantId: req.user.id,
-      },
-    });
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ message: 'Stripe is not configured.', code: 'stripe_not_configured' });
+    }
+
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: amountInSmallestUnit,
+        currency: STRIPE_CURRENCY,
+        automatic_payment_methods: { enabled: true },
+        metadata: {
+          rentalId: rental._id.toString(),
+          tenantId: req.user.id,
+        },
+      });
+    } catch (err) {
+      console.error('Stripe payment intent error', err);
+      const stripeMessage = err?.message || 'Stripe payment intent failed.';
+      const stripeCode = err?.code || err?.type || 'stripe_error';
+      return res.status(400).json({ message: stripeMessage, code: stripeCode });
+    }
 
     const payment = await Payment.create({
       rentalId: rental._id,
@@ -225,7 +268,7 @@ exports.createPaymentIntent = async (req, res) => {
       platformFee,
       penaltyAmount,
       total,
-      currency: 'bdt',
+      currency: STRIPE_CURRENCY,
       status: 'processing',
       stripePaymentIntentId: paymentIntent.id,
       moveOutMonth: useLeaveFlow ? effectiveMoveOutMonth : undefined,
@@ -245,8 +288,8 @@ exports.createPaymentIntent = async (req, res) => {
       monthsPaid: normalizedMonths,
     });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ message: 'Failed to create payment intent.' });
+    console.error('Create payment intent error', err);
+    return res.status(500).json({ message: 'Unable to create payment intent.', code: err?.code || 'payment_intent_error' });
   }
 };
 

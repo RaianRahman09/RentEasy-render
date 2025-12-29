@@ -139,11 +139,8 @@ const TenantDashboard = () => {
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center">
             <h2 className="text-lg font-semibold text-slate-900">Saved Filters</h2>
-            <button className="text-sm font-semibold text-blue-700" onClick={() => navigate('/search')}>
-              Go to Search
-            </button>
           </div>
           {message && (
             <div

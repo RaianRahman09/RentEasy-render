@@ -27,7 +27,11 @@ const Header = () => {
     <header className="border-b border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow)]">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link to="/" className="flex items-center gap-3 text-lg font-semibold text-[var(--primary)]">
-          <img src={logo} alt="RentEasy" className="h-8 w-auto sm:h-9 md:h-10" />
+          <img
+            src={logo}
+            alt="RentEasy"
+            className="h-10 w-auto shrink-0 object-contain sm:h-11 md:h-12"
+          />
           <span className="hidden text-lg font-semibold text-[var(--primary)] sm:inline-block">RentEasy</span>
         </Link>
         <nav className="hidden items-center gap-6 md:flex">

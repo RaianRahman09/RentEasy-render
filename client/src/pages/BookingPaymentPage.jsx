@@ -4,6 +4,7 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
+import { formatListingAddress } from '../utils/address';
 import { addMonths, compareMonths, listMonths, monthLabel } from '../utils/months';
 import { downloadReceipt } from '../utils/receipt';
 
@@ -324,7 +325,7 @@ const BookingPaymentPage = () => {
               />
               <div>
                 <div className="text-lg font-semibold text-slate-900">{listing.title}</div>
-                <div className="text-sm text-slate-600">{listing.address}</div>
+                <div className="text-sm text-slate-600">{formatListingAddress(listing)}</div>
                 <div className="mt-2 text-sm text-slate-600">
                   Monthly rent: {formatCurrency(listing.rent)}
                 </div>

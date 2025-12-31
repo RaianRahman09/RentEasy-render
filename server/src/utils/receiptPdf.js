@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { monthLabel } = require('./months');
+const { formatListingAddress } = require('./address');
 
 const ensureDir = (dirPath) => {
   fs.mkdirSync(dirPath, { recursive: true });
@@ -41,7 +42,7 @@ const generateReceiptPdf = async ({ payment, tenant, listing }) => {
   doc.moveDown();
 
   doc.text(`Listing: ${listing?.title || 'Listing'}`);
-  doc.text(`Address: ${listing?.address || 'N/A'}`);
+  doc.text(`Address: ${formatListingAddress(listing) || 'N/A'}`);
   doc.moveDown();
 
   const monthsLabel = (payment.monthsPaid || []).map((month) => monthLabel(month, 'en-US')).join(', ') || 'N/A';

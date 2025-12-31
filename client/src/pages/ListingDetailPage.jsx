@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../api/axios';
 import ListingLocationMap from '../components/maps/ListingLocationMap';
 import { useAuth } from '../context/AuthContext';
+import { formatListingAddress } from '../utils/address';
 import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const ListingDetailPage = () => {
@@ -83,7 +84,7 @@ const ListingDetailPage = () => {
           <div className="mt-4 flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-slate-900">{listing.title}</h1>
-              <div className="text-slate-600">{listing.address}</div>
+              <div className="text-slate-600">{formatListingAddress(listing)}</div>
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-700">${listing.rent}/mo</div>

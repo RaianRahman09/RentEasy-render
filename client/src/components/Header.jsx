@@ -2,7 +2,6 @@ import React from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useChat } from '../context/ChatContext';
-import { useSupport } from '../context/SupportContext';
 import NotificationBell from './NotificationBell';
 import logo from '../assets/renteasy-logo.png';
 
@@ -14,8 +13,6 @@ const navLinkClass = ({ isActive }) =>
 const Header = () => {
   const { user, logout } = useAuth();
   const { unreadCount } = useChat();
-  const { unread } = useSupport();
-
   const supportPath =
     user?.role === 'admin'
       ? '/admin/support'
@@ -94,32 +91,6 @@ const Header = () => {
                   )}
                 </Link>
               )}
-              <Link
-                to={supportPath}
-                aria-label="Support tickets"
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] transition hover:text-[var(--text)]"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M12 3a7 7 0 0 0-7 7v2.5a3.5 3.5 0 0 0 7 0V10a3.5 3.5 0 0 0-7 0" />
-                  <path d="M12 3a7 7 0 0 1 7 7v2.5a3.5 3.5 0 0 1-7 0V10a3.5 3.5 0 0 1 7 0" />
-                  <path d="M12 18.5v2.5" />
-                  <circle cx="12" cy="21.5" r="0.5" />
-                </svg>
-                {unread.totalUnreadMessages > 0 && (
-                  <span className="absolute -right-1 -top-1 inline-flex min-w-[20px] items-center justify-center rounded-full bg-[var(--danger)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--on-danger)]">
-                    {unread.totalUnreadMessages > 99 ? '99+' : unread.totalUnreadMessages}
-                  </span>
-                )}
-              </Link>
               <NotificationBell />
               {user.role === 'tenant' && (
                 <Link

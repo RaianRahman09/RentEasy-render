@@ -1,6 +1,7 @@
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { monthLabel } = require('./months');
+const { formatListingAddress } = require('./address');
 
 const CURRENCY = '৳';
 const FONT_BODY = 'Helvetica';
@@ -252,7 +253,7 @@ const generateReceiptPdf = ({ payment, tenant, landlord, listing, stream }) => {
 
   doc.font(FONT_BODY).fontSize(11).fillColor('#0f172a');
   doc.text(`Title: ${safeText(listing?.title)}`);
-  doc.text(`Address: ${safeText(listing?.address)}`);
+  doc.text(`Address: ${safeText(formatListingAddress(listing) || 'N/A')}`);
   doc.moveDown(0.6);
 
   doc.font(FONT_BODY_BOLD).fontSize(13).fillColor('#0f172a');

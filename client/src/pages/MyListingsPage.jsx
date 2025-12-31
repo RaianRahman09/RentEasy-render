@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import ConfirmModal from '../components/ConfirmModal';
+import { formatListingAddress } from '../utils/address';
 
 const StatusBadge = ({ status }) => (
   <span
@@ -107,7 +108,7 @@ const MyListingsPage = () => {
               <tr key={l._id} className="border-t border-slate-100">
                 <td className="px-4 py-3">{l.title}</td>
                 <td className="px-4 py-3">${l.rent}/mo</td>
-                <td className="px-4 py-3">{l.address}</td>
+                <td className="px-4 py-3">{formatListingAddress(l)}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={l.status} />
                 </td>

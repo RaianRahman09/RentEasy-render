@@ -1,30 +1,65 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import SearchResultsMap from '../components/maps/SearchResultsMap';
+import { formatListingAddress } from '../utils/address';
 import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
+const MAX_BUDGET = 100000;
+const MIN_BUDGET = 0;
+const BUDGET_STEP = 1000;
+const MAP_DEBOUNCE_MS = 300;
+const budgetFormatter = new Intl.NumberFormat('en-BD');
+
+const parseMaxBudget = (params) => {
+  const rawValue = params.get('maxBudget') ?? params.get('maxRent');
+  if (rawValue === null || rawValue === '') return MAX_BUDGET;
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return MAX_BUDGET;
+  return Math.min(Math.max(parsed, MIN_BUDGET), MAX_BUDGET);
+};
+
+const getFiltersFromSearch = (search) => {
+  const params = new URLSearchParams(search);
+  return {
+    title: params.get('title') || '',
+    location: params.get('location') || '',
+    maxBudget: parseMaxBudget(params),
+    roomType: params.get('roomType') || '',
+    rentStartMonth: params.get('rentStartMonth') || '',
+  };
+};
+
+const buildApiParams = (nextFilters, bounds) => {
+  const params = {
+    location: nextFilters.location || undefined,
+    locationText: nextFilters.location || undefined,
+    keywords: nextFilters.title || undefined,
+    title: nextFilters.title || undefined,
+    maxBudget: Number.isFinite(nextFilters.maxBudget) ? nextFilters.maxBudget : undefined,
+    roomType: nextFilters.roomType || undefined,
+    rentStartMonth: nextFilters.rentStartMonth || undefined,
+  };
+  if (bounds?.ne && bounds?.sw) {
+    params.neLat = bounds.ne.lat;
+    params.neLng = bounds.ne.lng;
+    params.swLat = bounds.sw.lat;
+    params.swLng = bounds.sw.lng;
+  }
+  return params;
+};
 
 const SearchResultsPage = () => {
   const location = useLocation();
-  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const [filters, setFilters] = useState({
-    title: query.get('title') || '',
-    location: query.get('location') || '',
-    maxRent: query.get('maxRent') || '',
-    roomType: query.get('roomType') || '',
-    rentStartMonth: query.get('rentStartMonth') || '',
-  });
-  const [results, setResults] = useState([]);
+  const [filters, setFilters] = useState(() => getFiltersFromSearch(location.search));
+  const [visibleProperties, setVisibleProperties] = useState([]);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
   const [mapBounds, setMapBounds] = useState(null);
-  const [pendingBounds, setPendingBounds] = useState(null);
-  const [showSearchArea, setShowSearchArea] = useState(false);
   const [activeListingId, setActiveListingId] = useState(null);
   const [viewMode, setViewMode] = useState('list');
   const [loading, setLoading] = useState(false);
@@ -32,59 +67,80 @@ const SearchResultsPage = () => {
   const [saveStatus, setSaveStatus] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  const normalizedFilters = useMemo(
-    () => ({
-      title: query.get('title') || '',
-      location: query.get('location') || '',
-      maxRent: query.get('maxRent') || '',
-      roomType: query.get('roomType') || '',
-      rentStartMonth: query.get('rentStartMonth') || '',
-    }),
-    [location.search]
-  );
+  const appliedFiltersRef = useRef(getFiltersFromSearch(location.search));
+  const activeBoundsRef = useRef(null);
+  const debounceRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   const buildSearchParams = (nextFilters) => {
     const params = new URLSearchParams();
     if (nextFilters.title) params.append('title', nextFilters.title);
     if (nextFilters.location) params.append('location', nextFilters.location);
-    if (nextFilters.maxRent) params.append('maxRent', nextFilters.maxRent);
+    if (Number.isFinite(nextFilters.maxBudget)) params.append('maxBudget', String(nextFilters.maxBudget));
     if (nextFilters.roomType) params.append('roomType', nextFilters.roomType);
     if (nextFilters.rentStartMonth) params.append('rentStartMonth', nextFilters.rentStartMonth);
     return params;
   };
 
-  const fetchSearchResults = useCallback(async (nextFilters) => {
+  const fetchSearchResults = useCallback(async (nextFilters, bounds, options = {}) => {
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
     setLoading(true);
     setError('');
     try {
       const res = await api.get('/listings/search', {
-        params: {
-          locationText: nextFilters.location,
-          title: nextFilters.title,
-          maxRent: nextFilters.maxRent,
-          roomType: nextFilters.roomType,
-          rentStartMonth: nextFilters.rentStartMonth,
-        },
+        params: buildApiParams(nextFilters, bounds),
       });
-      setResults(res.data.listings || []);
-      setMapCenter(res.data.mapCenter || DEFAULT_CENTER);
-      setMapBounds(res.data.defaultBounds || null);
-      setShowSearchArea(false);
-      setPendingBounds(null);
+      if (requestId !== requestIdRef.current) return;
+      setVisibleProperties(res.data.listings || []);
+      if (options.updateMap) {
+        setMapCenter(res.data.mapCenter || DEFAULT_CENTER);
+        setMapBounds(res.data.defaultBounds || null);
+        activeBoundsRef.current = res.data.defaultBounds || null;
+      }
       setActiveListingId(null);
     } catch (err) {
+      if (requestId !== requestIdRef.current) return;
       console.error(err);
       setError(err.response?.data?.message || 'Failed to fetch listings.');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    setFilters(normalizedFilters);
-    fetchSearchResults(normalizedFilters);
-  }, [fetchSearchResults, normalizedFilters]);
+    const nextFilters = getFiltersFromSearch(location.search);
+    const prevFilters = appliedFiltersRef.current;
+    const locationChanged = nextFilters.location !== prevFilters.location;
+    if (locationChanged) {
+      activeBoundsRef.current = null;
+    }
+    appliedFiltersRef.current = nextFilters;
+    setFilters(nextFilters);
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    const boundsToUse = locationChanged ? null : activeBoundsRef.current;
+    fetchSearchResults(nextFilters, boundsToUse, { updateMap: !boundsToUse });
+  }, [fetchSearchResults, location.search]);
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    },
+    []
+  );
+
+  const formattedBudget = useMemo(() => budgetFormatter.format(filters.maxBudget), [filters.maxBudget]);
+  const budgetPercent = useMemo(
+    () => Math.round((filters.maxBudget / MAX_BUDGET) * 100),
+    [filters.maxBudget]
+  );
 
   const onSubmit = (e) => {
     e.preventDefault();
@@ -92,8 +148,15 @@ const SearchResultsPage = () => {
     navigate(`/search?${params.toString()}`);
   };
 
+  const commitMaxBudget = (value) => {
+    const nextFilters = { ...filters, maxBudget: value };
+    setFilters(nextFilters);
+    const params = buildSearchParams(nextFilters);
+    navigate(`/search?${params.toString()}`);
+  };
+
   const onClearRentStartMonth = () => {
-    const nextFilters = { ...filters, rentStartMonth: '' };
+    const nextFilters = { ...filters, rentStartMonth: '', maxBudget: MAX_BUDGET };
     setFilters(nextFilters);
     const params = buildSearchParams(nextFilters);
     navigate(`/search?${params.toString()}`);
@@ -114,7 +177,7 @@ const SearchResultsPage = () => {
         name: filters.title || filters.location || 'My Saved Filter',
         title: filters.title,
         location: filters.location,
-        maxRent: filters.maxRent ? Number(filters.maxRent) : undefined,
+        maxRent: Number.isFinite(filters.maxBudget) ? filters.maxBudget : undefined,
         roomType: filters.roomType,
       };
       await api.post('/filters', payload);
@@ -129,43 +192,23 @@ const SearchResultsPage = () => {
   };
 
   const onMapMoved = (bounds) => {
+    if (!bounds) return;
     const ne = bounds.getNorthEast();
     const sw = bounds.getSouthWest();
-    setPendingBounds({
+    const nextBounds = {
       ne: { lat: ne.lat, lng: ne.lng },
       sw: { lat: sw.lat, lng: sw.lng },
-    });
-    setShowSearchArea(true);
-  };
-
-  const onSearchArea = async () => {
-    if (!pendingBounds) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await api.get('/listings/in-bounds', {
-        params: {
-          neLat: pendingBounds.ne.lat,
-          neLng: pendingBounds.ne.lng,
-          swLat: pendingBounds.sw.lat,
-          swLng: pendingBounds.sw.lng,
-          maxRent: filters.maxRent,
-          roomType: filters.roomType,
-          title: filters.title,
-          rentStartMonth: filters.rentStartMonth,
-        },
-      });
-      setResults(res.data.listings || []);
-      setShowSearchArea(false);
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Failed to search this area.');
-    } finally {
-      setLoading(false);
+    };
+    activeBoundsRef.current = nextBounds;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
+    debounceRef.current = setTimeout(() => {
+      fetchSearchResults(appliedFiltersRef.current, nextBounds, { updateMap: false });
+    }, MAP_DEBOUNCE_MS);
   };
 
-  const activeListing = results.find((listing) => listing._id === activeListingId);
+  const activeListing = visibleProperties.find((listing) => listing._id === activeListingId);
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -176,7 +219,7 @@ const SearchResultsPage = () => {
 
       <form
         onSubmit={onSubmit}
-        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr_0.8fr_auto_auto]"
+        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.9fr_1.3fr_0.8fr_1fr_auto_auto]"
       >
         <input
           type="text"
@@ -192,13 +235,31 @@ const SearchResultsPage = () => {
           placeholder="Keywords"
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
-        <input
-          type="number"
-          value={filters.maxRent}
-          onChange={(e) => setFilters((f) => ({ ...f, maxRent: e.target.value }))}
-          placeholder="Max Budget"
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
-        />
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-[var(--muted)]">
+            <span>Max Budget</span>
+            <span className="text-[var(--text)]">৳{formattedBudget}</span>
+          </div>
+          <input
+            type="range"
+            min={MIN_BUDGET}
+            max={MAX_BUDGET}
+            step={BUDGET_STEP}
+            value={filters.maxBudget}
+            onChange={(e) => setFilters((f) => ({ ...f, maxBudget: Number(e.target.value) }))}
+            onMouseUp={(e) => commitMaxBudget(Number(e.currentTarget.value))}
+            onTouchEnd={(e) => commitMaxBudget(Number(e.currentTarget.value))}
+            aria-label="Max budget"
+            className="budget-slider mt-3 w-full"
+            style={{
+              background: `linear-gradient(to right, var(--primary) 0%, var(--primary) ${budgetPercent}%, var(--surface-2) ${budgetPercent}%, var(--surface-2) 100%)`,
+            }}
+          />
+          <div className="mt-2 flex items-center justify-between text-[10px] text-[var(--muted)]">
+            <span>৳0</span>
+            <span>৳{budgetFormatter.format(MAX_BUDGET)}</span>
+          </div>
+        </div>
         <select
           value={filters.roomType}
           onChange={(e) => setFilters((f) => ({ ...f, roomType: e.target.value }))}
@@ -257,7 +318,7 @@ const SearchResultsPage = () => {
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-[var(--muted)]">
-          {loading ? 'Loading listings...' : `${results.length} results`}
+          {loading ? 'Loading listings...' : `${visibleProperties.length} results`}
         </div>
         <div className="flex items-center gap-2 md:hidden">
           <button
@@ -297,7 +358,7 @@ const SearchResultsPage = () => {
             viewMode === 'map' ? 'hidden md:block' : 'block'
           }`}
         >
-          {results.map((listing) => (
+          {visibleProperties.map((listing) => (
             <button
               key={listing._id}
               type="button"
@@ -323,7 +384,7 @@ const SearchResultsPage = () => {
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="text-lg font-semibold text-[var(--text)]">{listing.title}</div>
-                      <div className="text-sm text-[var(--muted)]">{listing.address}</div>
+                      <div className="text-sm text-[var(--muted)]">{formatListingAddress(listing)}</div>
                       {listing.rentStartMonth && (
                         <div className="text-xs text-[var(--muted)]">
                           Available from: {formatRentStartMonth(listing.rentStartMonth)}
@@ -359,7 +420,7 @@ const SearchResultsPage = () => {
               </div>
             </button>
           ))}
-          {!results.length && !loading && (
+          {!visibleProperties.length && !loading && (
             <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-6 text-sm text-[var(--muted)]">
               No listings found. Adjust filters and search again.
             </div>
@@ -369,12 +430,10 @@ const SearchResultsPage = () => {
         <div className={`${viewMode === 'map' ? 'block' : 'hidden md:block'} md:sticky md:top-6`}>
           <div className="h-[70vh] md:h-[calc(100vh-220px)]">
             <SearchResultsMap
-              listings={results}
+              listings={visibleProperties}
               activeListingId={activeListingId}
               mapCenter={mapCenter}
               mapBounds={mapBounds}
-              showSearchArea={showSearchArea}
-              onSearchArea={onSearchArea}
               onMapMoved={onMapMoved}
               onMarkerClick={(listing) => setActiveListingId(listing._id)}
             />

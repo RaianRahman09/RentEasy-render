@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
+import { formatListingAddress } from '../utils/address';
 import { formatAppointmentWindow } from '../utils/appointments';
 
 const RequestAppointmentPage = () => {
@@ -84,7 +85,7 @@ const RequestAppointmentPage = () => {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">{listing?.title || 'Listing'}</h2>
-            <p className="text-sm text-slate-500">{listing?.address}</p>
+            <p className="text-sm text-slate-500">{formatListingAddress(listing)}</p>
           </div>
           <div className="text-sm font-semibold text-slate-700">${listing?.rent || ''}/mo</div>
         </div>

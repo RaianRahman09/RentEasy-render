@@ -3,6 +3,8 @@ const Rental = require('../models/Rental');
 const cloudinary = require('../utils/cloudinary');
 const { destroyCloudinaryAssets } = require('../utils/cloudinaryAssets');
 const { notifyTenantsForListing } = require('../services/notificationService');
+const { normalizeAddress } = require('../utils/address');
+const { geocodeLocationText } = require('../utils/geocode');
 
 const RENT_START_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -39,6 +41,8 @@ const toNumber = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const hasValue = (value) => value !== null && value !== undefined && value !== '';
+
 const applyRentStartMonthFilter = (filter, rentStartMonth) => {
   if (!rentStartMonth) return null;
   const normalizedRentStartMonth = String(rentStartMonth).trim();
@@ -50,21 +54,73 @@ const applyRentStartMonthFilter = (filter, rentStartMonth) => {
 };
 
 const buildFilters = (body = {}) => {
-  const { location, minRent, maxRent, roomType, amenities, status, title, rentStartMonth } = body;
+  const {
+    location,
+    minRent,
+    maxRent,
+    maxBudget,
+    roomType,
+    amenities,
+    status,
+    title,
+    rentStartMonth,
+  } = body;
   const filter = {};
   if (status) filter.status = status;
   if (title) filter.title = { $regex: title, $options: 'i' };
   if (roomType) filter.roomType = roomType;
   const amenityList = toArray(amenities);
   if (amenityList.length) filter.amenities = { $all: amenityList };
-  if (location) filter.address = { $regex: location, $options: 'i' };
-  if (minRent || maxRent) {
+  if (location) {
+    const regex = { $regex: location, $options: 'i' };
+    filter.$or = [
+      { 'address.formatted': regex },
+      { 'address.line1': regex },
+      { 'address.city': regex },
+      { 'address.country': regex },
+      { legacyAddress: regex },
+      { address: regex },
+    ];
+  }
+  const resolvedMaxRent = hasValue(maxRent) ? maxRent : maxBudget;
+  if (hasValue(minRent) || hasValue(resolvedMaxRent)) {
     filter.rent = {};
-    if (minRent) filter.rent.$gte = Number(minRent);
-    if (maxRent) filter.rent.$lte = Number(maxRent);
+    if (hasValue(minRent)) filter.rent.$gte = Number(minRent);
+    if (hasValue(resolvedMaxRent)) filter.rent.$lte = Number(resolvedMaxRent);
   }
   if (rentStartMonth) filter.rentStartMonth = { $lte: rentStartMonth };
   return filter;
+};
+
+const parseAddressPayload = (body = {}) => {
+  const rawAddress = body.address;
+  let parsed = null;
+  if (rawAddress && typeof rawAddress === 'object' && !Array.isArray(rawAddress)) {
+    parsed = rawAddress;
+  } else if (typeof rawAddress === 'string') {
+    try {
+      const candidate = JSON.parse(rawAddress);
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+        parsed = candidate;
+      }
+    } catch (err) {
+      parsed = null;
+    }
+  }
+  if (!parsed) {
+    const { addressCountry, addressCity, addressLine1, addressFormatted } = body;
+    if (addressCountry || addressCity || addressLine1 || addressFormatted) {
+      parsed = {
+        country: addressCountry,
+        city: addressCity,
+        line1: addressLine1,
+        formatted: addressFormatted,
+      };
+    }
+  }
+  const legacyAddress =
+    typeof rawAddress === 'string' && !parsed ? rawAddress.trim() : body.legacyAddress?.trim();
+  return { address: parsed, legacyAddress };
 };
 
 const parseCoordinates = (payload = {}) => {
@@ -151,46 +207,6 @@ const toPublicListing = (listing) => {
   };
 };
 
-const geocodeLocationText = async (locationText) => {
-  if (!locationText) return null;
-  const baseUrl = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
-  const url = new URL('/search', baseUrl);
-  url.searchParams.set('q', locationText);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('addressdetails', '0');
-  const email = process.env.NOMINATIM_EMAIL;
-  if (email) url.searchParams.set('email', email);
-
-  // Learning-only: free geocoding via OpenStreetMap Nominatim (no paid API keys required).
-  const response = await fetch(url.toString(), {
-    headers: {
-      'User-Agent': 'RentEasy (learning project)',
-      Accept: 'application/json',
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`Geocoding failed with status ${response.status}`);
-  }
-  const data = await response.json();
-  if (!Array.isArray(data) || !data.length) return null;
-  const result = data[0];
-  const lat = toNumber(result.lat);
-  const lng = toNumber(result.lon);
-  if (lat === null || lng === null) return null;
-  let bounds = null;
-  if (Array.isArray(result.boundingbox) && result.boundingbox.length === 4) {
-    const [south, north, west, east] = result.boundingbox.map((val) => toNumber(val));
-    if ([south, north, west, east].every((val) => val !== null)) {
-      bounds = {
-        sw: { lat: south, lng: west },
-        ne: { lat: north, lng: east },
-      };
-    }
-  }
-  return { lat, lng, bounds };
-};
-
 exports.getFeaturedListings = async (_req, res) => {
   try {
     const listings = await Listing.find({ status: 'active' })
@@ -228,64 +244,126 @@ exports.searchListingsByLocation = async (req, res) => {
   try {
     const {
       locationText,
+      location,
       minRent,
       maxRent,
+      maxBudget,
       roomType,
       title,
+      keywords,
       lat,
       lng,
       radiusKm,
       rentStartMonth,
+      neLat,
+      neLng,
+      swLat,
+      swLng,
     } = req.query;
 
     const filter = {
       status: 'active',
     };
-    if (title) filter.title = { $regex: title, $options: 'i' };
+    const andClauses = [];
+    const keywordQuery = keywords || title;
+    if (keywordQuery) {
+      const regex = { $regex: keywordQuery, $options: 'i' };
+      andClauses.push({ $or: [{ title: regex }, { description: regex }] });
+    }
     if (roomType) filter.roomType = roomType;
-    if (minRent || maxRent) {
+    const resolvedMaxRent = hasValue(maxRent) ? maxRent : maxBudget;
+    if (hasValue(minRent) || hasValue(resolvedMaxRent)) {
       filter.rent = {};
-      if (minRent) filter.rent.$gte = Number(minRent);
-      if (maxRent) filter.rent.$lte = Number(maxRent);
+      if (hasValue(minRent)) filter.rent.$gte = Number(minRent);
+      if (hasValue(resolvedMaxRent)) filter.rent.$lte = Number(resolvedMaxRent);
     }
     const rentStartMonthError = applyRentStartMonthFilter(filter, rentStartMonth);
     if (rentStartMonthError) {
       return res.status(400).json({ message: rentStartMonthError });
     }
 
+    const locationQuery = locationText || location;
+    if (locationQuery) {
+      const regex = { $regex: locationQuery, $options: 'i' };
+      andClauses.push({
+        $or: [
+          { 'address.formatted': regex },
+          { 'address.line1': regex },
+          { 'address.city': regex },
+          { 'address.country': regex },
+          { legacyAddress: regex },
+          { address: regex },
+        ],
+      });
+    }
+
+    const neLatNum = toNumber(neLat);
+    const neLngNum = toNumber(neLng);
+    const swLatNum = toNumber(swLat);
+    const swLngNum = toNumber(swLng);
+    const hasBounds = [neLatNum, neLngNum, swLatNum, swLngNum].every((val) => val !== null);
+
     const explicitCoords = parseCoordinates({ lat, lng });
     let searchCenter = explicitCoords ? { lat: explicitCoords[1], lng: explicitCoords[0] } : null;
     let bounds = null;
 
-    if (!searchCenter && locationText) {
-      try {
-        const geo = await geocodeLocationText(locationText);
-        if (geo) {
-          searchCenter = { lat: geo.lat, lng: geo.lng };
-          bounds = geo.bounds || null;
+    if (hasBounds) {
+      filter.location = {
+        $geoWithin: {
+          $box: [
+            [swLngNum, swLatNum],
+            [neLngNum, neLatNum],
+          ],
+        },
+      };
+      bounds = {
+        ne: { lat: neLatNum, lng: neLngNum },
+        sw: { lat: swLatNum, lng: swLngNum },
+      };
+    } else {
+      if (!searchCenter && locationQuery) {
+        try {
+          const geo = await geocodeLocationText(locationQuery);
+          if (geo) {
+            searchCenter = { lat: geo.lat, lng: geo.lng };
+            bounds = geo.bounds || null;
+          }
+        } catch (geoError) {
+          console.warn('Geocoding failed, falling back to text search', geoError.message);
         }
-      } catch (geoError) {
-        console.warn('Geocoding failed, falling back to text search', geoError.message);
+      }
+
+      const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
+      if (searchCenter) {
+        filter.location = {
+          $geoWithin: {
+            $centerSphere: [[searchCenter.lng, searchCenter.lat], radius / 6378.1],
+          },
+        };
       }
     }
 
-    const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
-    if (searchCenter) {
-      filter.location = {
-        $geoWithin: {
-          $centerSphere: [[searchCenter.lng, searchCenter.lat], radius / 6378.1],
-        },
-      };
-    } else if (locationText) {
-      filter.address = { $regex: locationText, $options: 'i' };
+    if (andClauses.length) {
+      filter.$and = andClauses;
     }
 
     const listings = await Listing.find(filter)
       .select('title address rent rentStartMonth roomType beds baths photos status location')
       .lean();
 
-    const mapCenter = searchCenter || centerFromListings(listings);
-    const defaultBounds = bounds || boundsFromCenter(mapCenter, radius);
+    let mapCenter = DEFAULT_MAP_CENTER;
+    let defaultBounds = null;
+    if (hasBounds) {
+      mapCenter = {
+        lat: (neLatNum + swLatNum) / 2,
+        lng: (neLngNum + swLngNum) / 2,
+      };
+      defaultBounds = bounds;
+    } else {
+      const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
+      mapCenter = searchCenter || centerFromListings(listings);
+      defaultBounds = bounds || boundsFromCenter(mapCenter, radius);
+    }
 
     return res.json({
       listings: listings.map(toPublicListing),
@@ -310,10 +388,11 @@ exports.getListingsInBounds = async (req, res) => {
 
     const filter = { status: 'active' };
     if (req.query.title) filter.title = { $regex: req.query.title, $options: 'i' };
-    if (req.query.minRent || req.query.maxRent) {
+    const resolvedMaxRent = hasValue(req.query.maxRent) ? req.query.maxRent : req.query.maxBudget;
+    if (hasValue(req.query.minRent) || hasValue(resolvedMaxRent)) {
       filter.rent = {};
-      if (req.query.minRent) filter.rent.$gte = Number(req.query.minRent);
-      if (req.query.maxRent) filter.rent.$lte = Number(req.query.maxRent);
+      if (hasValue(req.query.minRent)) filter.rent.$gte = Number(req.query.minRent);
+      if (hasValue(resolvedMaxRent)) filter.rent.$lte = Number(resolvedMaxRent);
     }
     if (req.query.roomType) filter.roomType = req.query.roomType;
     const rentStartMonthError = applyRentStartMonthFilter(filter, req.query.rentStartMonth);
@@ -416,12 +495,12 @@ exports.createListing = async (req, res) => {
       rent,
       serviceCharge,
       rentStartMonth,
-      address,
       roomType,
       beds,
       baths,
       status = 'active',
     } = req.body;
+    const { address: addressPayload } = parseAddressPayload(req.body);
     const normalizedRentStartMonth = rentStartMonth?.trim();
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
@@ -429,6 +508,10 @@ exports.createListing = async (req, res) => {
 
     if (!normalizedRentStartMonth || !RENT_START_MONTH_REGEX.test(normalizedRentStartMonth)) {
       return res.status(400).json({ message: 'Rent start month is required in YYYY-MM format.' });
+    }
+    const normalizedAddress = normalizeAddress(addressPayload || {});
+    if (!normalizedAddress.country || !normalizedAddress.city || !normalizedAddress.line1) {
+      return res.status(400).json({ message: 'Country, city/area, and street are required.' });
     }
     if (!coordinates) {
       return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
@@ -464,7 +547,7 @@ exports.createListing = async (req, res) => {
       rent: Number(rent),
       serviceCharge: parsedServiceCharge,
       rentStartMonth: normalizedRentStartMonth,
-      address,
+      address: normalizedAddress,
       roomType,
       beds: Number(beds),
       baths: Number(baths),
@@ -493,7 +576,11 @@ exports.updateListing = async (req, res) => {
     const listing = await Listing.findOne({ _id: req.params.id, owner: req.user.id });
     if (!listing) return res.status(404).json({ message: 'Listing not found' });
 
-    const { title, description, rent, serviceCharge, rentStartMonth, address, roomType, beds, baths, status } = req.body;
+    const { title, description, rent, serviceCharge, rentStartMonth, roomType, beds, baths, status } = req.body;
+    const { address: addressPayload, legacyAddress } = parseAddressPayload(req.body);
+    const normalizedAddress = addressPayload ? normalizeAddress(addressPayload) : null;
+    const hasAddressUpdate =
+      normalizedAddress && (normalizedAddress.country || normalizedAddress.city || normalizedAddress.line1);
     const amenities = toArray(req.body.amenities);
     const existingPhotos = toArray(req.body.existingPhotos);
     const coordinates = parseCoordinates(req.body);
@@ -521,7 +608,17 @@ exports.updateListing = async (req, res) => {
       }
       listing.serviceCharge = parsedServiceCharge;
     }
-    if (address) listing.address = address;
+    if (hasAddressUpdate) {
+      if (typeof listing.address === 'string' && !listing.legacyAddress) {
+        listing.legacyAddress = listing.address;
+      }
+      listing.address = normalizedAddress;
+    } else if (legacyAddress) {
+      listing.legacyAddress = legacyAddress;
+      if (typeof listing.address === 'string') {
+        listing.address = legacyAddress;
+      }
+    }
     if (roomType) listing.roomType = roomType;
     if (beds) listing.beds = Number(beds);
     if (baths) listing.baths = Number(baths);

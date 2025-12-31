@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { monthLabel } from '../utils/months';
+import { formatListingAddress } from '../utils/address';
 
 const StatCard = ({ title, value, subtitle, to }) => {
   const content = (
@@ -298,7 +299,9 @@ const TenantDashboard = () => {
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold text-slate-900">{rental.listing?.title || 'Listing'}</div>
-                      <div className="text-xs text-slate-500">{rental.listing?.address}</div>
+                      <div className="text-xs text-slate-500">
+                        {formatListingAddress(rental.listing)}
+                      </div>
                       <div className="mt-1 text-xs text-slate-500">
                         Rent: ৳{Number(rental.listing?.rent || 0).toLocaleString()} • Start:{' '}
                         {monthLabel(rental.startMonth)}

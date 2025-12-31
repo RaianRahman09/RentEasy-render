@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
-import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { CircleMarker, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 const defaultState = {
   title: '',
@@ -9,13 +10,33 @@ const defaultState = {
   rent: '',
   serviceCharge: '',
   rentStartMonth: '',
-  address: '',
+  address: {
+    country: 'Bangladesh',
+    city: '',
+    line1: '',
+    formatted: '',
+  },
   roomType: 'Entire Place',
   beds: 1,
   baths: 1,
   amenities: '',
   status: 'active',
 };
+
+const COUNTRY_OPTIONS = [
+  'Bangladesh',
+  'India',
+  'Pakistan',
+  'Nepal',
+  'Sri Lanka',
+  'United States',
+  'United Kingdom',
+  'Canada',
+  'Australia',
+  'United Arab Emirates',
+  'Singapore',
+  'Malaysia',
+];
 
 const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
 const RENT_START_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -29,12 +50,12 @@ const MapClickHandler = ({ onSelect }) => {
   return null;
 };
 
-const MapRecenter = ({ center }) => {
+const MapRecenter = ({ center, zoom }) => {
   const map = useMap();
   useEffect(() => {
     if (!center?.lat || !center?.lng) return;
-    map.setView([center.lat, center.lng], map.getZoom(), { animate: true });
-  }, [center, map]);
+    map.setView([center.lat, center.lng], zoom ?? map.getZoom(), { animate: true });
+  }, [center, map, zoom]);
   return null;
 };
 
@@ -48,26 +69,47 @@ const ListingFormPage = () => {
   const [newPhotos, setNewPhotos] = useState([]);
   const [error, setError] = useState('');
   const [rentStartMonthError, setRentStartMonthError] = useState('');
+  const [addressErrors, setAddressErrors] = useState({});
+  const [isLegacyAddress, setIsLegacyAddress] = useState(false);
   const [coordinates, setCoordinates] = useState(null);
   const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+  const [mapZoom, setMapZoom] = useState(13);
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
   const [locationMessage, setLocationMessage] = useState('');
   const [locationStatus, setLocationStatus] = useState('');
   const [geocoding, setGeocoding] = useState(false);
+  const [locationConfirmed, setLocationConfirmed] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [locatingUser, setLocatingUser] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       if (!isEdit) return;
       const res = await api.get(`/listings/${id}/owner`);
       const l = res.data.listing;
+      const hasStructuredAddress = l?.address && typeof l.address === 'object' && !Array.isArray(l.address);
+      const nextAddress = hasStructuredAddress
+        ? {
+            country: l.address.country || '',
+            city: l.address.city || '',
+            line1: l.address.line1 || '',
+            formatted: l.address.formatted || '',
+          }
+        : {
+            country: '',
+            city: '',
+            line1: typeof l.address === 'string' ? l.address : '',
+            formatted: typeof l.address === 'string' ? l.address : '',
+          };
+      setIsLegacyAddress(!hasStructuredAddress || !nextAddress.country || !nextAddress.city);
       setForm({
         title: l.title,
         description: l.description,
         rent: l.rent,
         serviceCharge: Number.isFinite(l.serviceCharge) ? String(l.serviceCharge) : '0',
         rentStartMonth: l.rentStartMonth || '',
-        address: l.address,
+        address: nextAddress,
         roomType: l.roomType,
         beds: l.beds,
         baths: l.baths,
@@ -79,8 +121,10 @@ const ListingFormPage = () => {
         const [lng, lat] = l.location.coordinates;
         setCoordinates({ lat, lng });
         setMapCenter({ lat, lng });
+        setMapZoom(15);
         setManualLat(String(lat));
         setManualLng(String(lng));
+        setLocationConfirmed(true);
       }
     };
     load();
@@ -112,6 +156,7 @@ const ListingFormPage = () => {
     }
     setCoordinates({ lat, lng });
     setMapCenter({ lat, lng });
+    setLocationConfirmed(true);
     if (message) {
       setLocationMessage(message);
       setLocationStatus('success');
@@ -121,40 +166,112 @@ const ListingFormPage = () => {
     }
   };
 
+  const buildFullAddress = ({ line1, city, country }) =>
+    [line1?.trim(), city?.trim(), country?.trim()].filter(Boolean).join(', ');
+
+  const validateAddress = ({ requireFull } = {}) => {
+    const needsFullAddress = typeof requireFull === 'boolean' ? requireFull : !isEdit || !isLegacyAddress;
+    const errors = {};
+    if (!form.address.line1?.trim()) {
+      errors.line1 = 'Street / Road / House No. is required.';
+    }
+    if (needsFullAddress && !form.address.country?.trim()) {
+      errors.country = 'Country is required.';
+    }
+    if (needsFullAddress && !form.address.city?.trim()) {
+      errors.city = 'City/Area is required.';
+    }
+    setAddressErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAddressChange = (field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      address: {
+        ...prev.address,
+        [field]: value,
+        formatted: field === 'formatted' ? value : '',
+      },
+    }));
+    if (addressErrors[field]) {
+      setAddressErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+    if (locationConfirmed) {
+      setLocationConfirmed(false);
+    }
+  };
+
   const onGeocode = async () => {
-    if (!form.address.trim()) {
-      setLocationMessage('Enter an address or area name to search.');
-      setLocationStatus('error');
+    if (!validateAddress({ requireFull: true })) {
+      toast.error('Add country, city/area, and street to search the map.');
       return;
     }
     setGeocoding(true);
+    setLocationConfirmed(false);
     setLocationMessage('');
     setLocationStatus('');
     try {
-      const baseUrl = import.meta.env.VITE_NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
-      const url = new URL('/search', baseUrl);
-      url.searchParams.set('q', form.address.trim());
-      url.searchParams.set('format', 'json');
-      url.searchParams.set('limit', '1');
-
-      // Learning-only: OpenStreetMap Nominatim geocoding for map previews (no paid API keys required).
-      const response = await fetch(url.toString());
-      const data = await response.json();
-      if (!Array.isArray(data) || !data.length) {
-        setLocationMessage('No results found for that address.');
-        setLocationStatus('error');
-        return;
-      }
-      const lat = Number(data[0].lat);
-      const lng = Number(data[0].lon);
+      const res = await api.post('/geocode', {
+        country: form.address.country.trim(),
+        city: form.address.city.trim(),
+        line1: form.address.line1.trim(),
+      });
+      const lat = Number(res.data.lat);
+      const lng = Number(res.data.lng);
+      const formattedAddress = res.data.formattedAddress || buildFullAddress(form.address);
+      setForm((prev) => ({
+        ...prev,
+        address: {
+          ...prev.address,
+          formatted: formattedAddress,
+        },
+      }));
+      setMapZoom(15);
       applyCoordinates(lat, lng, 'Location pinned from OpenStreetMap.');
     } catch (err) {
       console.error(err);
-      setLocationMessage('Failed to reach the geocoding service. Try manual coordinates.');
+      setLocationMessage('Could not find this address. Refine your street or city.');
       setLocationStatus('error');
+      toast.error(err.response?.data?.message || "Couldn't find this address, refine your street/city.");
     } finally {
       setGeocoding(false);
     }
+  };
+
+  const onLocateUser = () => {
+    if (!navigator.geolocation) {
+      toast.error('Geolocation is not supported by your browser.');
+      return;
+    }
+    setLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const next = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        setUserLocation(next);
+        setMapCenter(next);
+        setMapZoom(15);
+        setLocatingUser(false);
+      },
+      (geoError) => {
+        if (geoError.code === geoError.PERMISSION_DENIED) {
+          toast.error('Location permission denied.');
+        } else {
+          toast.error('Unable to access your location.');
+        }
+        setLocatingUser(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const onUseUserLocation = () => {
+    if (!userLocation) return;
+    setMapZoom(16);
+    applyCoordinates(userLocation.lat, userLocation.lng, 'Listing location updated from your position.');
   };
 
   const onManualLatChange = (value) => {
@@ -174,6 +291,11 @@ const ListingFormPage = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    if (!validateAddress()) {
+      setLoading(false);
+      return;
+    }
     const rentMonthError = !form.rentStartMonth
       ? 'Rent starting month is required.'
       : RENT_START_MONTH_PATTERN.test(form.rentStartMonth)
@@ -184,18 +306,26 @@ const ListingFormPage = () => {
       setLoading(false);
       return;
     }
-    if (!coordinates || !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng))) {
+    if (!locationConfirmed || !coordinates || !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng))) {
       setError('Please select a valid map location before saving.');
       setLoading(false);
       return;
     }
+    const formattedAddress =
+      form.address.formatted?.trim() || buildFullAddress(form.address);
+    const addressPayload = {
+      country: form.address.country.trim(),
+      city: form.address.city.trim(),
+      line1: form.address.line1.trim(),
+      formatted: formattedAddress,
+    };
     const payload = new FormData();
     payload.append('title', form.title);
     payload.append('description', form.description);
     payload.append('rent', form.rent);
     payload.append('serviceCharge', form.serviceCharge);
     payload.append('rentStartMonth', form.rentStartMonth);
-    payload.append('address', form.address);
+    payload.append('address', JSON.stringify(addressPayload));
     payload.append('roomType', form.roomType);
     payload.append('beds', form.beds);
     payload.append('baths', form.baths);
@@ -320,49 +450,114 @@ const ListingFormPage = () => {
             rows={3}
           />
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-700">Address</div>
+              <div className="text-xs text-slate-500">
+                Country helps avoid ambiguous locations like Mirpur10.
+              </div>
+            </div>
+            {isLegacyAddress && (
+              <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                Legacy listing
+              </span>
+            )}
+          </div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Country</label>
+              <input
+                type="text"
+                list="country-options"
+                value={form.address.country}
+                onChange={(e) => handleAddressChange('country', e.target.value)}
+                className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${
+                  addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
+                }`}
+                placeholder="Bangladesh"
+                required={!isEdit || !isLegacyAddress}
+              />
+              {addressErrors.country && (
+                <div className="mt-1 text-xs font-semibold text-red-600">{addressErrors.country}</div>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700">City / Area</label>
+              <input
+                type="text"
+                value={form.address.city}
+                onChange={(e) => handleAddressChange('city', e.target.value)}
+                className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${
+                  addressErrors.city ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
+                }`}
+                placeholder="Banani, Gulshan, Dhanmondi"
+                required={!isEdit || !isLegacyAddress}
+              />
+              {addressErrors.city && (
+                <div className="mt-1 text-xs font-semibold text-red-600">{addressErrors.city}</div>
+              )}
+            </div>
+            <div className="md:col-span-3">
+              <label className="text-sm font-semibold text-slate-700">Street / Road / House No.</label>
+              <input
+                type="text"
+                value={form.address.line1}
+                onChange={(e) => handleAddressChange('line1', e.target.value)}
+                className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${
+                  addressErrors.line1 ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
+                }`}
+                placeholder="Road 12, House 7"
+                required
+              />
+              {addressErrors.line1 && (
+                <div className="mt-1 text-xs font-semibold text-red-600">{addressErrors.line1}</div>
+              )}
+            </div>
+          </div>
+          {isLegacyAddress && (!form.address.country.trim() || !form.address.city.trim()) && (
+            <div className="mt-3 text-xs font-semibold text-amber-600">
+              This listing uses a legacy address. Please fill in the missing country/city for accurate geocoding.
+            </div>
+          )}
+          <datalist id="country-options">
+            {COUNTRY_OPTIONS.map((country) => (
+              <option key={country} value={country} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <label className="text-sm font-semibold text-slate-700">Address</label>
-            <input
-              type="text"
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+            <label className="text-sm font-semibold text-slate-700">Room Type</label>
+            <select
+              value={form.roomType}
+              onChange={(e) => setForm((f) => ({ ...f, roomType: e.target.value }))}
               className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              required
+            >
+              <option>Entire Place</option>
+              <option>Single</option>
+              <option>Studio</option>
+              <option>Shared</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Beds</label>
+            <input
+              type="number"
+              value={form.beds}
+              onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Room Type</label>
-              <select
-                value={form.roomType}
-                onChange={(e) => setForm((f) => ({ ...f, roomType: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              >
-                <option>Entire Place</option>
-                <option>Single</option>
-                <option>Studio</option>
-                <option>Shared</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Beds</label>
-              <input
-                type="number"
-                value={form.beds}
-                onChange={(e) => setForm((f) => ({ ...f, beds: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-semibold text-slate-700">Baths</label>
-              <input
-                type="number"
-                value={form.baths}
-                onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))}
-                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-              />
-            </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Baths</label>
+            <input
+              type="number"
+              value={form.baths}
+              onChange={(e) => setForm((f) => ({ ...f, baths: e.target.value }))}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
           </div>
         </div>
 
@@ -384,9 +579,35 @@ const ListingFormPage = () => {
             </button>
           </div>
 
-          <div className="mt-4 h-64 overflow-hidden rounded-lg border border-slate-200">
-            <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={13} className="h-full w-full">
-              <MapRecenter center={mapCenter} />
+          <div className="relative mt-4 h-64 overflow-hidden rounded-lg border border-slate-200">
+            <button
+              type="button"
+              onClick={onLocateUser}
+              disabled={locatingUser}
+              title="Find my location"
+              aria-label="Find my location"
+              className="absolute right-3 top-3 z-[500] rounded-full bg-white/90 p-2 text-slate-700 shadow-md ring-1 ring-slate-200 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M12 4.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 12 4.5Z" />
+                <path d="M12 16.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5a.75.75 0 0 1 .75-.75Z" />
+                <path d="M4.5 12a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 4.5 12Z" />
+                <path d="M16.5 12a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5a.75.75 0 0 1-.75-.75Z" />
+                <path
+                  fillRule="evenodd"
+                  d="M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm-6 4.5a6 6 0 1 1 12 0 6 6 0 0 1-12 0Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+            <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={mapZoom} className="h-full w-full">
+              <MapRecenter center={mapCenter} zoom={mapZoom} />
               <MapClickHandler
                 onSelect={(latlng) => {
                   applyCoordinates(latlng.lat, latlng.lng);
@@ -397,6 +618,13 @@ const ListingFormPage = () => {
                 attribution="&copy; OpenStreetMap contributors"
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
+              {userLocation && (
+                <CircleMarker
+                  center={[userLocation.lat, userLocation.lng]}
+                  radius={8}
+                  pathOptions={{ color: '#0ea5e9', fillColor: '#38bdf8', fillOpacity: 0.8, weight: 2 }}
+                />
+              )}
               {coordinates && (
                 <Marker
                   position={[coordinates.lat, coordinates.lng]}
@@ -411,6 +639,18 @@ const ListingFormPage = () => {
               )}
             </MapContainer>
           </div>
+          {userLocation && (
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <span>Showing your location for reference.</span>
+              <button
+                type="button"
+                onClick={onUseUserLocation}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:border-blue-300 hover:text-blue-700"
+              >
+                Use my location as listing location
+              </button>
+            </div>
+          )}
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div>
@@ -442,6 +682,11 @@ const ListingFormPage = () => {
               }`}
             >
               {locationMessage}
+            </div>
+          )}
+          {!locationConfirmed && (
+            <div className="mt-2 text-xs font-semibold text-amber-600">
+              Save is disabled until a valid map location is selected.
             </div>
           )}
         </div>
@@ -511,8 +756,8 @@ const ListingFormPage = () => {
         <div className="flex gap-3">
           <button
             type="submit"
-            disabled={loading}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white"
+            disabled={loading || !locationConfirmed}
+            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? 'Saving...' : 'Save Listing'}
           </button>

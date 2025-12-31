@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import api from '../api/axios';
 import { createTicket, fetchMyTickets } from '../api/tickets';
 import TicketList from '../components/support/TicketList';
+import { formatListingAddress } from '../utils/address';
 import { TICKET_LABELS, hexToRgba } from '../utils/supportLabels';
 
 const isLightColor = (hex) => {
@@ -221,7 +222,7 @@ const SupportCenterPage = () => {
                   <option value="">Select a rented listing</option>
                   {rentals.map((rental) => (
                     <option key={rental.rentalId} value={rental.listing?._id}>
-                      {rental.listing?.title || 'Listing'} - {rental.listing?.address || 'Address'}
+                      {rental.listing?.title || 'Listing'} - {formatListingAddress(rental.listing) || 'Address'}
                     </option>
                   ))}
                 </select>

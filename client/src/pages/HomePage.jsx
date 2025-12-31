@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { formatListingAddress } from '../utils/address';
 import { formatRentStartMonth } from '../utils/rentStartMonth';
 
 const HomePage = () => {
@@ -155,7 +156,7 @@ const HomePage = () => {
                 </div>
                 <div className="p-4">
                   <div className="mb-2 text-lg font-semibold text-[var(--text)]">{listing.title}</div>
-                  <div className="text-sm text-[var(--muted)]">{listing.address}</div>
+                  <div className="text-sm text-[var(--muted)]">{formatListingAddress(listing)}</div>
                   <div className="mt-2 text-sm font-semibold text-[var(--primary)]">
                     ${listing.rent}/mo
                   </div>

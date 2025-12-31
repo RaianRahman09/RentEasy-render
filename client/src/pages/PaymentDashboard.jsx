@@ -33,8 +33,8 @@ const StatCard = ({ label, value, helper }) => (
 
 const PaymentDashboard = () => {
   const [payments, setPayments] = useState([]);
-  const [summary, setSummary] = useState({ thisMonth: 0, lastMonth: 0, allTime: 0, upcomingPayout: null });
-  const [filters, setFilters] = useState({ range: '30', status: 'all', listing: 'all' });
+  const [summary, setSummary] = useState({ thisMonth: 0, lastMonth: 0, allTime: 0 });
+  const [filters, setFilters] = useState({ range: '30', listing: 'all' });
   const [selectedPayment, setSelectedPayment] = useState(null);
 
   useEffect(() => {
@@ -63,9 +63,6 @@ const PaymentDashboard = () => {
 
   const filteredPayments = useMemo(() => {
     let filtered = [...payments];
-    if (filters.status !== 'all') {
-      filtered = filtered.filter((payment) => payment.status === filters.status);
-    }
     if (filters.listing !== 'all') {
       filtered = filtered.filter((payment) => payment.listingId?._id === filters.listing);
     }
@@ -201,15 +198,10 @@ const PaymentDashboard = () => {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
         <StatCard label="This Month's Earnings" value={formatCurrency(summary.thisMonth)} />
         <StatCard label="Last Month's Earnings" value={formatCurrency(summary.lastMonth)} />
         <StatCard label="All-Time Earnings" value={formatCurrency(summary.allTime)} />
-        <StatCard
-          label="Upcoming Payout"
-          value={summary.upcomingPayout ? formatCurrency(summary.upcomingPayout) : 'N/A'}
-          helper={summary.upcomingPayout ? 'Scheduled' : 'Stripe Connect not enabled'}
-        />
       </div>
 
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -237,16 +229,6 @@ const PaymentDashboard = () => {
                   {listing.title}
                 </option>
               ))}
-            </select>
-            <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2"
-              value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
-            >
-              <option value="all">All statuses</option>
-              <option value="succeeded">Succeeded</option>
-              <option value="processing">Processing</option>
-              <option value="failed">Failed</option>
             </select>
           </div>
         </div>
@@ -371,7 +353,9 @@ const PaymentDashboard = () => {
                 {filteredPayments.map((payment) => (
                   <tr
                     key={payment._id}
-                    className="border-t border-slate-100 hover:bg-slate-50"
+                    className={`border-t border-slate-100 hover:bg-slate-50 ${
+                      selectedPayment?._id === payment._id ? 'bg-slate-50' : ''
+                    }`}
                     onClick={() => setSelectedPayment(payment)}
                   >
                     <td className="py-3">{new Date(payment.createdAt).toLocaleDateString()}</td>

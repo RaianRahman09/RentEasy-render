@@ -2,6 +2,7 @@ const Listing = require('../models/Listing');
 const SavedFilter = require('../models/SavedFilter');
 const Appointment = require('../models/Appointment');
 const { formatAppointmentWindow } = require('../utils/appointmentEmail');
+const { formatListingAddress } = require('../utils/address');
 
 exports.getTenantDashboard = async (req, res) => {
   try {
@@ -65,7 +66,7 @@ exports.getLandlordDashboard = async (req, res) => {
     const snapshot = listings.slice(0, 3).map((l) => ({
       title: l.title,
       rent: l.rent,
-      location: l.address,
+      location: formatListingAddress(l),
       status: l.status,
       views: 100,
       bookings: 2,

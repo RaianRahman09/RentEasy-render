@@ -2,6 +2,7 @@ const SavedFilter = require('../models/SavedFilter');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendMail } = require('../utils/mailer');
+const { formatListingAddress } = require('../utils/address');
 
 const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
@@ -15,7 +16,7 @@ const textMatches = (value, query) => {
 const matchesFilter = (listing, filter) => {
   if (filter.status && listing.status !== filter.status) return false;
   if (!textMatches(listing.title, filter.title)) return false;
-  if (!textMatches(listing.address, filter.location)) return false;
+  if (!textMatches(formatListingAddress(listing), filter.location)) return false;
   if (filter.roomType && listing.roomType !== filter.roomType) return false;
   if (typeof filter.minRent === 'number' && listing.rent < filter.minRent) return false;
   if (typeof filter.maxRent === 'number' && listing.rent > filter.maxRent) return false;
@@ -29,6 +30,7 @@ const matchesFilter = (listing, filter) => {
 const buildEmailBody = (listing, matchedFilters = []) => {
   const listingUrl = `${clientBaseUrl}/listing/${listing._id}`;
   const filterList = matchedFilters.length ? `<p>Matched filters: ${matchedFilters.join(', ')}</p>` : '';
+  const locationText = formatListingAddress(listing);
   return `
     <div>
       <p>Hello,</p>
@@ -36,7 +38,7 @@ const buildEmailBody = (listing, matchedFilters = []) => {
       <p><strong>${listing.title}</strong></p>
       <ul>
         <li>Rent: $${listing.rent}/mo</li>
-        <li>Location: ${listing.address}</li>
+        <li>Location: ${locationText || 'N/A'}</li>
         <li>Room type: ${listing.roomType}</li>
         <li>Status: ${listing.status}</li>
       </ul>

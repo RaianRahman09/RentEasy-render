@@ -12,7 +12,8 @@ const ListingSchema = new mongoose.Schema(
       required: true,
       match: [/^\d{4}-(0[1-9]|1[0-2])$/, 'Rent start month must be in YYYY-MM format'],
     },
-    address: { type: String, required: true },
+    address: { type: mongoose.Schema.Types.Mixed, required: true },
+    legacyAddress: { type: String },
     location: {
       type: { type: String, enum: ['Point'], default: 'Point' },
       coordinates: {

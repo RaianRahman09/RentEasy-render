@@ -16,6 +16,7 @@ const { createNotification } = require('../services/notificationService');
 const { reconcileProcessingPayments } = require('../services/paymentService');
 const { sendMail } = require('../utils/mailer');
 const { buildMoveOutNoticeEmail } = require('../utils/rentalEmail');
+const { formatListingAddress } = require('../utils/address');
 
 const collectPaymentMonths = (payments = []) => {
   const paidMonths = new Set();
@@ -47,7 +48,7 @@ const buildListingSummary = (listing) => {
   return {
     _id: listing._id,
     title: listing.title,
-    address: listing.address,
+    address: formatListingAddress(listing),
     location: listing.location,
     rent: listing.rent,
     rentPrice: listing.rent,

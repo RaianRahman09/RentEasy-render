@@ -15,5 +15,5 @@ export const formatAddress = (address, legacyAddress) => {
   return legacy || '';
 };
 
-export const formatListingAddress = (listing = {}) =>
-  formatAddress(listing.address, listing.legacyAddress);
+export const formatListingAddress = (listing) =>
+  formatAddress(listing?.address, listing?.legacyAddress);

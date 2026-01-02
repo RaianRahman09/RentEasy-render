@@ -20,6 +20,8 @@ const StatCard = ({ title, value, accent, to }) => {
   );
 };
 
+const formatCurrency = (value) => `৳${Number(value || 0).toLocaleString('en-BD')}`;
+
 const LandlordDashboard = () => {
   const [data, setData] = useState(null);
 
@@ -32,6 +34,9 @@ const LandlordDashboard = () => {
   }, []);
 
   if (!data) return null;
+
+  const pendingTickets = typeof data.pendingTickets === 'number' ? data.pendingTickets : 0;
+  const unseenMessages = typeof data.unseenMessages === 'number' ? data.unseenMessages : 0;
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
@@ -47,12 +52,8 @@ const LandlordDashboard = () => {
       <div className="mt-6 grid gap-4 md:grid-cols-4">
         <StatCard title="Active Listings" value={data.activeCount} to="/landlord/listings?status=active" />
         <StatCard title="Upcoming Viewings" value={data.upcomingViewings} to="/landlord/appointments" />
-        <StatCard title="Pending Tickets" value={data.pendingTickets} />
-        <StatCard
-          title="Total Earnings"
-          value={`$${data.earnings.allTime}`}
-          accent="text-purple-700"
-        />
+        <StatCard title="Pending Tickets" value={pendingTickets} />
+        <StatCard title="Total Earnings" value={formatCurrency(data.earnings.allTime)} accent="text-purple-700" />
       </div>
 
       <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -76,7 +77,7 @@ const LandlordDashboard = () => {
               {data.snapshot.map((item) => (
                 <tr key={item.title} className="border-t border-slate-100">
                   <td className="py-2">{item.title}</td>
-                  <td className="py-2">${item.rent}</td>
+                  <td className="py-2">{formatCurrency(item.rent)}</td>
                   <td className="py-2">{item.location}</td>
                   <td className="py-2 capitalize">
                     <span
@@ -115,7 +116,7 @@ const LandlordDashboard = () => {
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Payment Summary</h2>
-          <div className="mt-2 text-sm text-slate-700">This Month: ${data.earnings.thisMonth}</div>
+          <div className="mt-2 text-sm text-slate-700">This Month: {formatCurrency(data.earnings.thisMonth)}</div>
           <Link
             to="/dashboard/landlord/payments"
             className="mt-3 inline-flex items-center justify-center rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:shadow-sm"
@@ -125,11 +126,18 @@ const LandlordDashboard = () => {
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Support & Messages</h2>
-          <div className="text-sm text-slate-700">Tickets: {data.tickets.length}</div>
-          <div className="text-sm text-slate-700">Messages: {data.messages.length}</div>
+          <div className="text-sm text-slate-700">Tickets: {pendingTickets} unresolved</div>
+          <div className="text-sm text-slate-700">Messages: {unseenMessages} unseen</div>
           <div className="mt-3 flex gap-2">
-            <button className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">Support</button>
-            <button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Messages</button>
+            <Link
+              to="/dashboard/landlord/support"
+              className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              Support
+            </Link>
+            <Link to="/chat" className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">
+              Messages
+            </Link>
           </div>
         </div>
       </div>

@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { formatListingAddress } from '../utils/address';
 import { formatRentStartMonth } from '../utils/rentStartMonth';
 
+const formatRent = (value) => `৳${Number(value || 0).toLocaleString('en-BD')}`;
+
 const ListingDetailPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
@@ -87,7 +89,7 @@ const ListingDetailPage = () => {
               <div className="text-slate-600">{formatListingAddress(listing)}</div>
             </div>
             <div className="text-right">
-              <div className="text-2xl font-bold text-blue-700">${listing.rent}/mo</div>
+              <div className="text-2xl font-bold text-blue-700">{formatRent(listing.rent)}/mo</div>
               <div className="text-sm text-slate-500">{listing.roomType}</div>
               {listing.rentStartMonth && (
                 <div className="text-sm text-slate-500">

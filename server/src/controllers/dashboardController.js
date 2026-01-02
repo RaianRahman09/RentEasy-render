@@ -1,8 +1,10 @@
 const Listing = require('../models/Listing');
 const SavedFilter = require('../models/SavedFilter');
 const Appointment = require('../models/Appointment');
+const Ticket = require('../models/Ticket');
 const { formatAppointmentWindow } = require('../utils/appointmentEmail');
 const { formatListingAddress } = require('../utils/address');
+const { getTotalUnreadCount } = require('../services/chatService');
 
 exports.getTenantDashboard = async (req, res) => {
   try {
@@ -61,7 +63,14 @@ exports.getLandlordDashboard = async (req, res) => {
       .sort({ startTime: 1 })
       .limit(3)
       .lean();
-    const pendingTickets = 1;
+    const [pendingTickets, unseenMessages] = await Promise.all([
+      Ticket.countDocuments({
+        assignedToRole: 'landlord',
+        assignedToUserId: req.user.id,
+        status: { $nin: ['resolved', 'closed'] },
+      }),
+      getTotalUnreadCount(req.user.id),
+    ]);
     const earnings = { thisMonth: 1500, allTime: 4500 };
     const snapshot = listings.slice(0, 3).map((l) => ({
       title: l.title,
@@ -77,17 +86,14 @@ exports.getLandlordDashboard = async (req, res) => {
       when: formatAppointmentWindow(appointment.startTime, appointment.endTime),
       status: appointment.status,
     }));
-    const tickets = [{ subject: 'Listing question', status: 'open' }];
-    const messages = [{ with: 'Tenant A', snippet: 'Can I schedule a viewing?' }];
     return res.json({
       activeCount,
       upcomingViewings,
       pendingTickets,
+      unseenMessages,
       earnings,
       snapshot,
       appointments,
-      tickets,
-      messages,
     });
   } catch (err) {
     console.error(err);

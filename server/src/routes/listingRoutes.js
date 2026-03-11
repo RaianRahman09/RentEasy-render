@@ -13,6 +13,12 @@ const {
   getListingsInBounds,
   deleteListing,
 } = require('../controllers/listingController');
+const {
+  submitPropertyReview,
+  getPropertyReviews,
+  getPropertyRatingSummary,
+  getPropertyReviewEligibility,
+} = require('../controllers/reviewController');
 
 const router = express.Router();
 
@@ -21,6 +27,10 @@ router.get('/featured', getFeaturedListings);
 router.get('/search', searchListingsByLocation);
 router.get('/in-bounds', getListingsInBounds);
 router.post('/search', searchListings);
+router.get('/:id/reviews', getPropertyReviews);
+router.post('/:id/reviews', auth, requireRole('tenant'), submitPropertyReview);
+router.get('/:id/rating-summary', getPropertyRatingSummary);
+router.get('/:id/review-eligibility', auth, requireRole('tenant'), getPropertyReviewEligibility);
 router.get('/:id', getListingById);
 
 // landlord protected

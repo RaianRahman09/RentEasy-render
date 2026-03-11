@@ -82,6 +82,13 @@ const FindPropertiesPage = () => {
               <div className="p-4">
                 <div className="text-lg font-semibold text-[var(--text)]">{listing.title}</div>
                 <div className="text-sm text-[var(--muted)]">{formatListingAddress(listing)}</div>
+                {Number(listing.ratingCount || 0) > 0 ? (
+                  <div className="mt-1 text-xs font-semibold text-amber-600">
+                    ★ {Number(listing.ratingAverage || 0).toFixed(1)} ({listing.ratingCount} reviews)
+                  </div>
+                ) : (
+                  <div className="mt-1 text-xs text-[var(--muted)]">No reviews yet</div>
+                )}
                 <div className="mt-2 text-sm font-semibold text-[var(--primary)]">
                   ৳{Number(listing.rent || 0).toLocaleString()}/mo
                 </div>

@@ -29,6 +29,8 @@ const getFiltersFromSearch = (search) => {
     maxBudget: parseMaxBudget(params),
     roomType: params.get('roomType') || '',
     rentStartMonth: params.get('rentStartMonth') || '',
+    minRating: params.get('minRating') || '',
+    sortBy: params.get('sortBy') || '',
   };
 };
 
@@ -41,6 +43,8 @@ const buildApiParams = (nextFilters, bounds) => {
     maxBudget: Number.isFinite(nextFilters.maxBudget) ? nextFilters.maxBudget : undefined,
     roomType: nextFilters.roomType || undefined,
     rentStartMonth: nextFilters.rentStartMonth || undefined,
+    minRating: nextFilters.minRating || undefined,
+    sortBy: nextFilters.sortBy || undefined,
   };
   if (bounds?.ne && bounds?.sw) {
     params.neLat = bounds.ne.lat;
@@ -79,6 +83,8 @@ const SearchResultsPage = () => {
     if (Number.isFinite(nextFilters.maxBudget)) params.append('maxBudget', String(nextFilters.maxBudget));
     if (nextFilters.roomType) params.append('roomType', nextFilters.roomType);
     if (nextFilters.rentStartMonth) params.append('rentStartMonth', nextFilters.rentStartMonth);
+    if (nextFilters.minRating) params.append('minRating', nextFilters.minRating);
+    if (nextFilters.sortBy) params.append('sortBy', nextFilters.sortBy);
     return params;
   };
 
@@ -219,7 +225,7 @@ const SearchResultsPage = () => {
 
       <form
         onSubmit={onSubmit}
-        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-[1.2fr_0.9fr_1.3fr_0.8fr_1fr_auto_auto]"
+        className="mt-5 grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[var(--shadow)] md:grid-cols-2 xl:grid-cols-4"
       >
         <input
           type="text"
@@ -270,6 +276,25 @@ const SearchResultsPage = () => {
           <option value="Single">Single</option>
           <option value="Studio">Studio</option>
           <option value="Shared">Shared</option>
+        </select>
+        <select
+          value={filters.minRating}
+          onChange={(e) => setFilters((f) => ({ ...f, minRating: e.target.value }))}
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none"
+        >
+          <option value="">Minimum Rating</option>
+          <option value="4">4 stars and up</option>
+          <option value="3">3 stars and up</option>
+          <option value="2">2 stars and up</option>
+          <option value="1">1 star and up</option>
+        </select>
+        <select
+          value={filters.sortBy}
+          onChange={(e) => setFilters((f) => ({ ...f, sortBy: e.target.value }))}
+          className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--primary)] focus:outline-none"
+        >
+          <option value="">Sort: Most recent</option>
+          <option value="highest_rated">Sort: Highest rated</option>
         </select>
         <div className="flex items-center gap-2">
           <input
@@ -385,6 +410,13 @@ const SearchResultsPage = () => {
                     <div>
                       <div className="text-lg font-semibold text-[var(--text)]">{listing.title}</div>
                       <div className="text-sm text-[var(--muted)]">{formatListingAddress(listing)}</div>
+                      {Number(listing.ratingCount || 0) > 0 ? (
+                        <div className="mt-1 text-xs font-semibold text-amber-600">
+                          ★ {Number(listing.ratingAverage || 0).toFixed(1)} ({listing.ratingCount} reviews)
+                        </div>
+                      ) : (
+                        <div className="mt-1 text-xs text-[var(--muted)]">No reviews yet</div>
+                      )}
                       {listing.rentStartMonth && (
                         <div className="text-xs text-[var(--muted)]">
                           Available from: {formatRentStartMonth(listing.rentStartMonth)}

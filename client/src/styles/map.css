@@ -23,9 +23,29 @@
   white-space: nowrap;
 }
 
+.map-price-marker-rent {
+  font-weight: 800;
+}
+
+.map-price-marker-separator {
+  opacity: 0.75;
+}
+
+.map-price-marker-rating.has-reviews {
+  color: #fde68a;
+}
+
+.map-price-marker-rating.no-reviews {
+  color: #e2e8f0;
+}
+
 .map-price-marker.is-active {
   background: #0f172a;
   color: #ffffff;
+}
+
+.map-price-marker.is-active .map-price-marker-rating.has-reviews {
+  color: #facc15;
 }
 
 .listing-popup .leaflet-popup-content-wrapper {

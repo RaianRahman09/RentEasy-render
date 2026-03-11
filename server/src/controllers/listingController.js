@@ -35,6 +35,7 @@ const resolveListingImages = (listing = {}) => {
 
 const DEFAULT_SEARCH_RADIUS_KM = 8;
 const DEFAULT_MAP_CENTER = { lat: 23.8103, lng: 90.4125 };
+const HIGHEST_RATED_SORT = 'highest_rated';
 
 const toNumber = (value) => {
   const num = Number(value);
@@ -51,6 +52,27 @@ const applyRentStartMonthFilter = (filter, rentStartMonth) => {
   }
   filter.rentStartMonth = { $lte: normalizedRentStartMonth };
   return null;
+};
+
+const parseMinRating = (value) => {
+  if (!hasValue(value)) return { value: null, error: null };
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 5) {
+    return { value: null, error: 'Minimum rating must be between 1 and 5.' };
+  }
+  return { value: parsed, error: null };
+};
+
+const applyMinRatingFilter = (filter, minRating) => {
+  if (!Number.isFinite(minRating)) return;
+  filter.ratingAverage = { $gte: minRating };
+};
+
+const resolveListingSort = (sortBy) => {
+  if (sortBy === HIGHEST_RATED_SORT) {
+    return { ratingAverage: -1, ratingCount: -1, createdAt: -1 };
+  }
+  return { createdAt: -1 };
 };
 
 const buildFilters = (body = {}) => {
@@ -198,6 +220,9 @@ const toPublicListing = (listing) => {
     photos: images,
     images,
     status: listing.status,
+    ratingAverage: Number(listing.ratingAverage || 0),
+    ratingCount: Number(listing.ratingCount || 0),
+    recommendCount: Number(listing.recommendCount || 0),
     mapLocation: obfuscated
       ? {
           type: 'Point',
@@ -225,9 +250,18 @@ exports.searchListings = async (req, res) => {
     if (req.body.rentStartMonth && !RENT_START_MONTH_REGEX.test(req.body.rentStartMonth)) {
       return res.status(400).json({ message: 'Rent start month must be in YYYY-MM format.' });
     }
+    const minRating = parseMinRating(req.body.minRating);
+    if (minRating.error) {
+      return res.status(400).json({ message: minRating.error });
+    }
     const filter = buildFilters(req.body);
+    applyMinRatingFilter(filter, minRating.value);
+    const sort = resolveListingSort(req.body.sortBy);
     const listings = await Listing.find(filter)
-      .select('title address rent rentStartMonth roomType beds baths photos status location')
+      .select(
+        'title address rent rentStartMonth roomType beds baths photos status location ratingAverage ratingCount recommendCount'
+      )
+      .sort(sort)
       .lean();
     const mapped = listings.map((l) => ({
       ...toPublicListing(l),
@@ -259,6 +293,8 @@ exports.searchListingsByLocation = async (req, res) => {
       neLng,
       swLat,
       swLng,
+      minRating,
+      sortBy,
     } = req.query;
 
     const filter = {
@@ -281,6 +317,11 @@ exports.searchListingsByLocation = async (req, res) => {
     if (rentStartMonthError) {
       return res.status(400).json({ message: rentStartMonthError });
     }
+    const parsedMinRating = parseMinRating(minRating);
+    if (parsedMinRating.error) {
+      return res.status(400).json({ message: parsedMinRating.error });
+    }
+    applyMinRatingFilter(filter, parsedMinRating.value);
 
     const locationQuery = locationText || location;
     if (locationQuery) {
@@ -348,7 +389,10 @@ exports.searchListingsByLocation = async (req, res) => {
     }
 
     const listings = await Listing.find(filter)
-      .select('title address rent rentStartMonth roomType beds baths photos status location')
+      .select(
+        'title address rent rentStartMonth roomType beds baths photos status location ratingAverage ratingCount recommendCount'
+      )
+      .sort(resolveListingSort(sortBy))
       .lean();
 
     let mapCenter = DEFAULT_MAP_CENTER;
@@ -399,6 +443,11 @@ exports.getListingsInBounds = async (req, res) => {
     if (rentStartMonthError) {
       return res.status(400).json({ message: rentStartMonthError });
     }
+    const parsedMinRating = parseMinRating(req.query.minRating);
+    if (parsedMinRating.error) {
+      return res.status(400).json({ message: parsedMinRating.error });
+    }
+    applyMinRatingFilter(filter, parsedMinRating.value);
 
     filter.location = {
       $geoWithin: {
@@ -410,7 +459,10 @@ exports.getListingsInBounds = async (req, res) => {
     };
 
     const listings = await Listing.find(filter)
-      .select('title address rent rentStartMonth roomType beds baths photos status location')
+      .select(
+        'title address rent rentStartMonth roomType beds baths photos status location ratingAverage ratingCount recommendCount'
+      )
+      .sort(resolveListingSort(req.query.sortBy))
       .lean();
 
     return res.json({ listings: listings.map(toPublicListing) });

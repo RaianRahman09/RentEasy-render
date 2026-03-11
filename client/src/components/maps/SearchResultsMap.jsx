@@ -7,12 +7,33 @@ import { formatListingAddress } from '../../utils/address';
 
 const formatPrice = (rent) => `৳${Number(rent || 0).toLocaleString()}`;
 
-const createPriceIcon = (rent, isActive) => {
-  const label = formatPrice(rent);
-  const width = Math.max(64, label.length * 8 + 28);
+const getRatingSummary = (listing = {}) => {
+  const ratingCount = Number(listing.ratingCount || 0);
+  const ratingAverage = Number(listing.ratingAverage || 0);
+  if (ratingCount > 0) {
+    return {
+      text: `${ratingAverage.toFixed(1)}★`,
+      hasReviews: true,
+    };
+  }
+  return {
+    text: 'No reviews',
+    hasReviews: false,
+  };
+};
+
+const createPriceIcon = (listing, isActive) => {
+  const rentLabel = formatPrice(listing.rent);
+  const rating = getRatingSummary(listing);
+  const label = `${rentLabel} • ${rating.text}`;
+  const width = Math.max(128, Math.min(260, label.length * 8 + 36));
   return L.divIcon({
     className: 'price-marker-wrapper',
-    html: `<div class="map-price-marker ${isActive ? 'is-active' : ''}">${label}</div>`,
+    html: `<div class="map-price-marker ${isActive ? 'is-active' : ''}">
+      <span class="map-price-marker-rent">${rentLabel}</span>
+      <span class="map-price-marker-separator">•</span>
+      <span class="map-price-marker-rating ${rating.hasReviews ? 'has-reviews' : 'no-reviews'}">${rating.text}</span>
+    </div>`,
     iconSize: [width, 30],
     iconAnchor: [width / 2, 30],
   });
@@ -76,11 +97,15 @@ const MapMoveListener = ({ onMoved }) => {
 };
 
 const PriceMarker = ({ listing, isActive, onMarkerClick }) => {
-  const icon = useMemo(() => createPriceIcon(listing.rent, isActive), [listing.rent, isActive]);
+  const icon = useMemo(
+    () => createPriceIcon(listing, isActive),
+    [listing.rent, listing.ratingAverage, listing.ratingCount, isActive]
+  );
   const coords = listing.mapLocation?.coordinates;
   const navigate = useNavigate();
   if (!coords) return null;
   const [lng, lat] = coords;
+  const rating = getRatingSummary(listing);
 
   return (
     <Marker
@@ -104,9 +129,22 @@ const PriceMarker = ({ listing, isActive, onMarkerClick }) => {
           </div>
           <div className="mt-3 text-sm font-semibold text-[var(--text)]">{listing.title}</div>
           <div className="text-xs text-[var(--muted)]">{formatListingAddress(listing)}</div>
-          <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="font-semibold text-[var(--primary)]">{formatPrice(listing.rent)}/mo</span>
-            <span className="text-[var(--muted)]">
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <span className="rounded-full bg-[var(--surface-2)] px-2 py-1 font-semibold text-[var(--primary)]">
+              {formatPrice(listing.rent)}/mo
+            </span>
+            <span
+              className={`rounded-full px-2 py-1 font-semibold ${
+                rating.hasReviews
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-[var(--surface-2)] text-[var(--muted)]'
+              }`}
+            >
+              {rating.text}
+            </span>
+          </div>
+          <div className="mt-1 text-xs text-[var(--muted)]">
+            <span>
               {listing.beds} bd · {listing.baths} ba
             </span>
           </div>

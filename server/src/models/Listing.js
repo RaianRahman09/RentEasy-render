@@ -40,11 +40,15 @@ const ListingSchema = new mongoose.Schema(
     photos: [{ type: String }],
     status: { type: String, enum: ['active', 'archived'], default: 'active' },
     featured: { type: Boolean, default: false },
+    ratingAverage: { type: Number, default: 0, min: 0, max: 5 },
+    ratingCount: { type: Number, default: 0, min: 0 },
+    recommendCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
 
 ListingSchema.index({ location: '2dsphere' });
 ListingSchema.index({ rentStartMonth: 1 });
+ListingSchema.index({ status: 1, ratingAverage: -1, ratingCount: -1 });
 
 module.exports = mongoose.model('Listing', ListingSchema);

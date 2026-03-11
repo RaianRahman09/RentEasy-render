@@ -3,8 +3,15 @@ const Rental = require('../models/Rental');
 const cloudinary = require('../utils/cloudinary');
 const { destroyCloudinaryAssets } = require('../utils/cloudinaryAssets');
 const { notifyTenantsForListing } = require('../services/notificationService');
-const { normalizeAddress } = require('../utils/address');
+const { normalizeAddress, normalizeSearchText } = require('../utils/address');
 const { geocodeLocationText } = require('../utils/geocode');
+const {
+  BANGLADESH_COUNTRY_NAME,
+  BANGLADESH_CENTER,
+  clampBoundsToBangladesh,
+  isBangladeshCountry,
+  isBangladeshCoordinates,
+} = require('../utils/bangladeshGeo');
 
 const RENT_START_MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -34,8 +41,9 @@ const resolveListingImages = (listing = {}) => {
 };
 
 const DEFAULT_SEARCH_RADIUS_KM = 8;
-const DEFAULT_MAP_CENTER = { lat: 23.8103, lng: 90.4125 };
+const DEFAULT_MAP_CENTER = BANGLADESH_CENTER;
 const HIGHEST_RATED_SORT = 'highest_rated';
+const BANGLADESH_COUNTRY_REGEX = /^\s*bangladesh\s*$/i;
 
 const toNumber = (value) => {
   const num = Number(value);
@@ -75,7 +83,33 @@ const resolveListingSort = (sortBy) => {
   return { createdAt: -1 };
 };
 
-const buildFilters = (body = {}) => {
+const escapeRegex = (value) => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildLooseRegex = (value) => ({
+  $regex: escapeRegex(value).replace(/\s+/g, '\\s+'),
+  $options: 'i',
+});
+
+const buildBangladeshCountryClause = () => ({
+  $or: [{ 'address.countryNormalized': 'bangladesh' }, { 'address.country': BANGLADESH_COUNTRY_REGEX }],
+});
+
+const buildAreaLocationClause = (locationQuery) => {
+  const original = String(locationQuery || '').trim();
+  const normalized = normalizeSearchText(original);
+  const clauses = [];
+  if (normalized) {
+    clauses.push({ 'address.cityNormalized': buildLooseRegex(normalized) });
+  }
+  if (original) {
+    clauses.push({ 'address.city': buildLooseRegex(original) });
+  }
+  if (!clauses.length) return null;
+  return clauses.length === 1 ? clauses[0] : { $or: clauses };
+};
+
+const buildFilters = (body = {}, options = {}) => {
+  const { bangladeshOnly = false } = options;
   const {
     location,
     minRent,
@@ -88,22 +122,15 @@ const buildFilters = (body = {}) => {
     rentStartMonth,
   } = body;
   const filter = {};
+  const andClauses = [];
   if (status) filter.status = status;
   if (title) filter.title = { $regex: title, $options: 'i' };
   if (roomType) filter.roomType = roomType;
   const amenityList = toArray(amenities);
   if (amenityList.length) filter.amenities = { $all: amenityList };
-  if (location) {
-    const regex = { $regex: location, $options: 'i' };
-    filter.$or = [
-      { 'address.formatted': regex },
-      { 'address.line1': regex },
-      { 'address.city': regex },
-      { 'address.country': regex },
-      { legacyAddress: regex },
-      { address: regex },
-    ];
-  }
+  const areaClause = buildAreaLocationClause(location);
+  if (areaClause) andClauses.push(areaClause);
+  if (bangladeshOnly) andClauses.push(buildBangladeshCountryClause());
   const resolvedMaxRent = hasValue(maxRent) ? maxRent : maxBudget;
   if (hasValue(minRent) || hasValue(resolvedMaxRent)) {
     filter.rent = {};
@@ -111,6 +138,7 @@ const buildFilters = (body = {}) => {
     if (hasValue(resolvedMaxRent)) filter.rent.$lte = Number(resolvedMaxRent);
   }
   if (rentStartMonth) filter.rentStartMonth = { $lte: rentStartMonth };
+  if (andClauses.length) filter.$and = andClauses;
   return filter;
 };
 
@@ -186,7 +214,12 @@ const obfuscateCoordinates = (coordinates, seedValue) => {
 const centerFromListings = (listings = []) => {
   const coords = listings
     .map((listing) => listing.location?.coordinates)
-    .filter((coord) => Array.isArray(coord) && coord.length === 2);
+    .filter(
+      (coord) =>
+        Array.isArray(coord) &&
+        coord.length === 2 &&
+        isBangladeshCoordinates(Number(coord[1]), Number(coord[0]))
+    );
   if (!coords.length) return DEFAULT_MAP_CENTER;
   const sums = coords.reduce(
     (acc, [lng, lat]) => ({ lng: acc.lng + lng, lat: acc.lat + lat }),
@@ -199,14 +232,19 @@ const boundsFromCenter = (center, radiusKm = DEFAULT_SEARCH_RADIUS_KM) => {
   const radiusMeters = radiusKm * 1000;
   const latOffset = metersToDegreesLat(radiusMeters);
   const lngOffset = metersToDegreesLng(radiusMeters, center.lat);
-  return {
+  return clampBoundsToBangladesh({
     ne: { lat: center.lat + latOffset, lng: center.lng + lngOffset },
     sw: { lat: center.lat - latOffset, lng: center.lng - lngOffset },
-  };
+  });
 };
 
 const toPublicListing = (listing) => {
-  const obfuscated = obfuscateCoordinates(listing.location?.coordinates, listing._id?.toString() || '');
+  const coords = listing.location?.coordinates;
+  const inBangladesh =
+    Array.isArray(coords) &&
+    coords.length === 2 &&
+    isBangladeshCoordinates(Number(coords[1]), Number(coords[0]));
+  const obfuscated = inBangladesh ? obfuscateCoordinates(coords, listing._id?.toString() || '') : null;
   const images = resolveListingImages(listing);
   return {
     _id: listing._id,
@@ -234,7 +272,7 @@ const toPublicListing = (listing) => {
 
 exports.getFeaturedListings = async (_req, res) => {
   try {
-    const listings = await Listing.find({ status: 'active' })
+    const listings = await Listing.find({ status: 'active', $and: [buildBangladeshCountryClause()] })
       .sort({ createdAt: -1 })
       .limit(6)
       .lean();
@@ -254,7 +292,7 @@ exports.searchListings = async (req, res) => {
     if (minRating.error) {
       return res.status(400).json({ message: minRating.error });
     }
-    const filter = buildFilters(req.body);
+    const filter = buildFilters({ ...req.body, status: req.body.status || 'active' }, { bangladeshOnly: true });
     applyMinRatingFilter(filter, minRating.value);
     const sort = resolveListingSort(req.body.sortBy);
     const listings = await Listing.find(filter)
@@ -300,7 +338,7 @@ exports.searchListingsByLocation = async (req, res) => {
     const filter = {
       status: 'active',
     };
-    const andClauses = [];
+    const andClauses = [buildBangladeshCountryClause()];
     const keywordQuery = keywords || title;
     if (keywordQuery) {
       const regex = { $regex: keywordQuery, $options: 'i' };
@@ -323,20 +361,9 @@ exports.searchListingsByLocation = async (req, res) => {
     }
     applyMinRatingFilter(filter, parsedMinRating.value);
 
-    const locationQuery = locationText || location;
-    if (locationQuery) {
-      const regex = { $regex: locationQuery, $options: 'i' };
-      andClauses.push({
-        $or: [
-          { 'address.formatted': regex },
-          { 'address.line1': regex },
-          { 'address.city': regex },
-          { 'address.country': regex },
-          { legacyAddress: regex },
-          { address: regex },
-        ],
-      });
-    }
+    const locationQuery = String(locationText || location || '').trim();
+    const areaClause = buildAreaLocationClause(locationQuery);
+    if (areaClause) andClauses.push(areaClause);
 
     const neLatNum = toNumber(neLat);
     const neLngNum = toNumber(neLng);
@@ -349,22 +376,29 @@ exports.searchListingsByLocation = async (req, res) => {
     let bounds = null;
 
     if (hasBounds) {
+      const clampedBounds = clampBoundsToBangladesh({
+        ne: { lat: neLatNum, lng: neLngNum },
+        sw: { lat: swLatNum, lng: swLngNum },
+      });
+      if (!clampedBounds) {
+        return res.status(400).json({ message: 'Invalid bounds coordinates.' });
+      }
       filter.location = {
         $geoWithin: {
           $box: [
-            [swLngNum, swLatNum],
-            [neLngNum, neLatNum],
+            [clampedBounds.sw.lng, clampedBounds.sw.lat],
+            [clampedBounds.ne.lng, clampedBounds.ne.lat],
           ],
         },
       };
-      bounds = {
-        ne: { lat: neLatNum, lng: neLngNum },
-        sw: { lat: swLatNum, lng: swLngNum },
-      };
+      bounds = clampedBounds;
     } else {
+      if (searchCenter && !isBangladeshCoordinates(searchCenter.lat, searchCenter.lng)) {
+        searchCenter = null;
+      }
       if (!searchCenter && locationQuery) {
         try {
-          const geo = await geocodeLocationText(locationQuery);
+          const geo = await geocodeLocationText(`${locationQuery}, ${BANGLADESH_COUNTRY_NAME}`);
           if (geo) {
             searchCenter = { lat: geo.lat, lng: geo.lng };
             bounds = geo.bounds || null;
@@ -375,7 +409,7 @@ exports.searchListingsByLocation = async (req, res) => {
       }
 
       const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
-      if (searchCenter) {
+      if (searchCenter && !areaClause) {
         filter.location = {
           $geoWithin: {
             $centerSphere: [[searchCenter.lng, searchCenter.lat], radius / 6378.1],
@@ -399,14 +433,14 @@ exports.searchListingsByLocation = async (req, res) => {
     let defaultBounds = null;
     if (hasBounds) {
       mapCenter = {
-        lat: (neLatNum + swLatNum) / 2,
-        lng: (neLngNum + swLngNum) / 2,
+        lat: (bounds.ne.lat + bounds.sw.lat) / 2,
+        lng: (bounds.ne.lng + bounds.sw.lng) / 2,
       };
       defaultBounds = bounds;
     } else {
       const radius = toNumber(radiusKm) || DEFAULT_SEARCH_RADIUS_KM;
       mapCenter = searchCenter || centerFromListings(listings);
-      defaultBounds = bounds || boundsFromCenter(mapCenter, radius);
+      defaultBounds = clampBoundsToBangladesh(bounds || boundsFromCenter(mapCenter, radius));
     }
 
     return res.json({
@@ -430,7 +464,7 @@ exports.getListingsInBounds = async (req, res) => {
       return res.status(400).json({ message: 'Invalid bounds coordinates.' });
     }
 
-    const filter = { status: 'active' };
+    const filter = { status: 'active', $and: [buildBangladeshCountryClause()] };
     if (req.query.title) filter.title = { $regex: req.query.title, $options: 'i' };
     const resolvedMaxRent = hasValue(req.query.maxRent) ? req.query.maxRent : req.query.maxBudget;
     if (hasValue(req.query.minRent) || hasValue(resolvedMaxRent)) {
@@ -449,11 +483,18 @@ exports.getListingsInBounds = async (req, res) => {
     }
     applyMinRatingFilter(filter, parsedMinRating.value);
 
+    const clampedBounds = clampBoundsToBangladesh({
+      ne: { lat: neLat, lng: neLng },
+      sw: { lat: swLat, lng: swLng },
+    });
+    if (!clampedBounds) {
+      return res.status(400).json({ message: 'Invalid bounds coordinates.' });
+    }
     filter.location = {
       $geoWithin: {
         $box: [
-          [swLng, swLat],
-          [neLng, neLat],
+          [clampedBounds.sw.lng, clampedBounds.sw.lat],
+          [clampedBounds.ne.lng, clampedBounds.ne.lat],
         ],
       },
     };
@@ -565,8 +606,13 @@ exports.createListing = async (req, res) => {
     if (!normalizedAddress.country || !normalizedAddress.city || !normalizedAddress.line1) {
       return res.status(400).json({ message: 'Country, city/area, and street are required.' });
     }
-    if (!coordinates) {
-      return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
+    if (!isBangladeshCountry(normalizedAddress.country)) {
+      return res.status(400).json({ message: 'Only Bangladesh listings are allowed.' });
+    }
+    normalizedAddress.country = BANGLADESH_COUNTRY_NAME;
+    normalizedAddress.countryNormalized = 'bangladesh';
+    if (!coordinates || !isBangladeshCoordinates(Number(coordinates[1]), Number(coordinates[0]))) {
+      return res.status(400).json({ message: 'Please select a valid map location inside Bangladesh.' });
     }
 
     const uploadedPhotos = [];
@@ -661,6 +707,14 @@ exports.updateListing = async (req, res) => {
       listing.serviceCharge = parsedServiceCharge;
     }
     if (hasAddressUpdate) {
+      if (!normalizedAddress.country || !normalizedAddress.city || !normalizedAddress.line1) {
+        return res.status(400).json({ message: 'Country, city/area, and street are required.' });
+      }
+      if (!isBangladeshCountry(normalizedAddress.country)) {
+        return res.status(400).json({ message: 'Only Bangladesh listings are allowed.' });
+      }
+      normalizedAddress.country = BANGLADESH_COUNTRY_NAME;
+      normalizedAddress.countryNormalized = 'bangladesh';
       if (typeof listing.address === 'string' && !listing.legacyAddress) {
         listing.legacyAddress = listing.address;
       }
@@ -693,9 +747,19 @@ exports.updateListing = async (req, res) => {
       return res.status(400).json({ message: 'Rent start month is required in YYYY-MM format.' });
     }
     if (coordinates) {
+      if (!isBangladeshCoordinates(Number(coordinates[1]), Number(coordinates[0]))) {
+        return res.status(400).json({ message: 'Please select a valid map location inside Bangladesh.' });
+      }
       listing.location = { type: 'Point', coordinates };
-    } else if (!listing.location?.coordinates?.length) {
-      return res.status(400).json({ message: 'Please select a valid map location for this listing.' });
+    } else {
+      const existingCoords = listing.location?.coordinates;
+      if (
+        !Array.isArray(existingCoords) ||
+        existingCoords.length !== 2 ||
+        !isBangladeshCoordinates(Number(existingCoords[1]), Number(existingCoords[0]))
+      ) {
+        return res.status(400).json({ message: 'Please select a valid map location inside Bangladesh.' });
+      }
     }
     listing.amenities = amenities.length ? amenities : [];
     listing.photos = photos;

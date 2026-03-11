@@ -5,8 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import SearchResultsMap from '../components/maps/SearchResultsMap';
 import { formatListingAddress } from '../utils/address';
 import { formatRentStartMonth } from '../utils/rentStartMonth';
+import { BANGLADESH_CENTER } from '../constants/bangladeshMap';
 
-const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
+const DEFAULT_CENTER = BANGLADESH_CENTER;
 const MAX_BUDGET = 100000;
 const MIN_BUDGET = 0;
 const BUDGET_STEP = 1000;
@@ -220,7 +221,7 @@ const SearchResultsPage = () => {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <h1 className="text-3xl font-bold text-[var(--text)]">Find Properties</h1>
       <p className="mt-2 text-sm text-[var(--muted)]">
-        Search by neighborhood or city and explore listings with the map.
+        Search by Bangladesh city/area (Banani, Gulshan, Mirpur, Dhanmondi) and explore listings on the map.
       </p>
 
       <form
@@ -231,7 +232,7 @@ const SearchResultsPage = () => {
           type="text"
           value={filters.location}
           onChange={(e) => setFilters((f) => ({ ...f, location: e.target.value }))}
-          placeholder="Location (Banani, Gulshan, Dhanmondi...)"
+          placeholder="Bangladesh area (Banani, Gulshan, Mirpur...)"
           className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
         />
         <input

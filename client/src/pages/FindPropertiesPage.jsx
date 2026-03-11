@@ -33,14 +33,14 @@ const FindPropertiesPage = () => {
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow)]">
         <h1 className="text-3xl font-bold text-[var(--text)]">Find Properties</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Start with a city or neighborhood name (Banani, Gulshan, Dhanmondi).
+          Start with a Bangladesh city/area name (Shewrapara, Gulshan, Mirpur, Banani, Dhanmondi).
         </p>
         <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-3 md:flex-row">
           <input
             type="text"
             value={locationText}
             onChange={(e) => setLocationText(e.target.value)}
-            placeholder="Enter a location"
+            placeholder="Enter Bangladesh city/area"
             className="w-full flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text)] placeholder:text-[var(--muted)] focus:border-[var(--primary)] focus:outline-none"
           />
           <button

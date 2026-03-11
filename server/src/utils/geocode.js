@@ -1,16 +1,27 @@
+const {
+  BANGLADESH_COUNTRY_CODE,
+  BANGLADESH_VIEWBOX,
+  clampBoundsToBangladesh,
+  isBangladeshNominatimResult,
+} = require('./bangladeshGeo');
+
 const toNumber = (value) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
 };
 
-const geocodeLocationText = async (locationText) => {
+const geocodeLocationText = async (locationText, options = {}) => {
   if (!locationText) return null;
+  const { limit = 5 } = options;
   const baseUrl = process.env.NOMINATIM_BASE_URL || 'https://nominatim.openstreetmap.org';
   const url = new URL('/search', baseUrl);
-  url.searchParams.set('q', locationText);
+  url.searchParams.set('q', String(locationText).trim());
   url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', '1');
-  url.searchParams.set('addressdetails', '0');
+  url.searchParams.set('limit', String(Math.max(1, Math.min(Number(limit) || 5, 20))));
+  url.searchParams.set('addressdetails', '1');
+  url.searchParams.set('countrycodes', BANGLADESH_COUNTRY_CODE);
+  url.searchParams.set('viewbox', BANGLADESH_VIEWBOX);
+  url.searchParams.set('bounded', '1');
   const email = process.env.NOMINATIM_EMAIL;
   if (email) url.searchParams.set('email', email);
 
@@ -26,7 +37,8 @@ const geocodeLocationText = async (locationText) => {
   }
   const data = await response.json();
   if (!Array.isArray(data) || !data.length) return null;
-  const result = data[0];
+  const result = data.find((item) => isBangladeshNominatimResult(item));
+  if (!result) return null;
   const lat = toNumber(result.lat);
   const lng = toNumber(result.lon);
   if (lat === null || lng === null) return null;
@@ -40,6 +52,7 @@ const geocodeLocationText = async (locationText) => {
       };
     }
   }
+  bounds = clampBoundsToBangladesh(bounds);
   return {
     lat,
     lng,

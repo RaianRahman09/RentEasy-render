@@ -4,6 +4,11 @@ import { CircleMarker, MapContainer, Marker, Popup, TileLayer, useMap, useMapEve
 import { useNavigate } from 'react-router-dom';
 import L from 'leaflet';
 import { formatListingAddress } from '../../utils/address';
+import {
+  BANGLADESH_CENTER,
+  BANGLADESH_LEAFLET_BOUNDS,
+  isWithinBangladesh,
+} from '../../constants/bangladeshMap';
 
 const formatPrice = (rent) => `৳${Number(rent || 0).toLocaleString()}`;
 
@@ -53,14 +58,17 @@ const MapController = ({ bounds, center, activeListing, userLocation }) => {
       );
       return;
     }
-    if (center?.lat && center?.lng) {
+    if (center?.lat && center?.lng && isWithinBangladesh(center.lat, center.lng)) {
       map.setView([center.lat, center.lng], 13, { animate: false });
+      return;
     }
+    map.setView([BANGLADESH_CENTER.lat, BANGLADESH_CENTER.lng], 7, { animate: false });
   }, [bounds, center, map]);
 
   React.useEffect(() => {
     if (!activeListing?.mapLocation?.coordinates) return;
     const [lng, lat] = activeListing.mapLocation.coordinates;
+    if (!isWithinBangladesh(lat, lng)) return;
     map.flyTo([lat, lng], Math.max(map.getZoom(), 14), { duration: 0.4 });
   }, [activeListing, map]);
 
@@ -97,10 +105,7 @@ const MapMoveListener = ({ onMoved }) => {
 };
 
 const PriceMarker = ({ listing, isActive, onMarkerClick }) => {
-  const icon = useMemo(
-    () => createPriceIcon(listing, isActive),
-    [listing.rent, listing.ratingAverage, listing.ratingCount, isActive]
-  );
+  const icon = useMemo(() => createPriceIcon(listing, isActive), [listing, isActive]);
   const coords = listing.mapLocation?.coordinates;
   const navigate = useNavigate();
   if (!coords) return null;
@@ -183,10 +188,16 @@ const SearchResultsMap = ({
     setLocatingUser(true);
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
+        const next = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
+        };
+        if (!isWithinBangladesh(next.lat, next.lng)) {
+          toast.error('Your current location is outside Bangladesh.');
+          setLocatingUser(false);
+          return;
+        }
+        setUserLocation(next);
         setLocatingUser(false);
       },
       (geoError) => {
@@ -240,7 +251,15 @@ const SearchResultsMap = ({
           />
         </svg>
       </button>
-      <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={13} scrollWheelZoom className="h-full w-full">
+      <MapContainer
+        center={[mapCenter.lat, mapCenter.lng]}
+        zoom={13}
+        scrollWheelZoom
+        className="h-full w-full"
+        maxBounds={BANGLADESH_LEAFLET_BOUNDS}
+        maxBoundsViscosity={1}
+        minZoom={7}
+      >
         <MapController bounds={mapBounds} center={mapCenter} activeListing={activeListing} userLocation={userLocation} />
         <MapMoveListener onMoved={onMapMoved} />
         {/* Learning-only map: OpenStreetMap + Leaflet (no paid API keys required). */}

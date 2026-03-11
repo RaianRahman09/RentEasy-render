@@ -2,7 +2,7 @@ const SavedFilter = require('../models/SavedFilter');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { sendMail } = require('../utils/mailer');
-const { formatListingAddress } = require('../utils/address');
+const { formatListingAddress, normalizeSearchText } = require('../utils/address');
 
 const clientBaseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
@@ -13,10 +13,21 @@ const textMatches = (value, query) => {
   return regex.test(value);
 };
 
+const areaMatches = (listing, query) => {
+  if (!query) return true;
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+  const area =
+    listing?.address?.cityNormalized ||
+    normalizeSearchText(listing?.address?.city || '');
+  if (!area) return false;
+  return area.includes(normalizedQuery);
+};
+
 const matchesFilter = (listing, filter) => {
   if (filter.status && listing.status !== filter.status) return false;
   if (!textMatches(listing.title, filter.title)) return false;
-  if (!textMatches(formatListingAddress(listing), filter.location)) return false;
+  if (!areaMatches(listing, filter.location)) return false;
   if (filter.roomType && listing.roomType !== filter.roomType) return false;
   if (typeof filter.minRent === 'number' && listing.rent < filter.minRent) return false;
   if (typeof filter.maxRent === 'number' && listing.rent > filter.maxRent) return false;

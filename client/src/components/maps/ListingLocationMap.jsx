@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import {
+  BANGLADESH_LEAFLET_BOUNDS,
+  isWithinBangladesh,
+} from '../../constants/bangladeshMap';
 
 const MapSizer = () => {
   const map = useMap();
@@ -27,11 +31,19 @@ const ListingLocationMap = ({ coordinates, title }) => {
     return [lat, lng];
   }, [coordinates]);
 
-  if (!position) return null;
+  if (!position || !isWithinBangladesh(position[0], position[1])) return null;
 
   return (
     <div className="h-60 w-full overflow-hidden rounded-lg bg-slate-100">
-      <MapContainer center={position} zoom={14} scrollWheelZoom className="h-full w-full">
+      <MapContainer
+        center={position}
+        zoom={14}
+        scrollWheelZoom
+        className="h-full w-full"
+        maxBounds={BANGLADESH_LEAFLET_BOUNDS}
+        maxBoundsViscosity={1}
+        minZoom={7}
+      >
         <MapSizer />
         <MapCenter position={position} />
         <TileLayer

@@ -3,6 +3,11 @@ import toast from 'react-hot-toast';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api/axios';
 import { CircleMarker, MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import {
+  BANGLADESH_CENTER,
+  BANGLADESH_LEAFLET_BOUNDS,
+  isWithinBangladesh,
+} from '../constants/bangladeshMap';
 
 const defaultState = {
   title: '',
@@ -23,22 +28,8 @@ const defaultState = {
   status: 'active',
 };
 
-const COUNTRY_OPTIONS = [
-  'Bangladesh',
-  'India',
-  'Pakistan',
-  'Nepal',
-  'Sri Lanka',
-  'United States',
-  'United Kingdom',
-  'Canada',
-  'Australia',
-  'United Arab Emirates',
-  'Singapore',
-  'Malaysia',
-];
-
-const DEFAULT_CENTER = { lat: 23.8103, lng: 90.4125 };
+const DEFAULT_CENTER = BANGLADESH_CENTER;
+const BANGLADESH_COUNTRY = 'Bangladesh';
 const RENT_START_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 const MapClickHandler = ({ onSelect }) => {
@@ -91,13 +82,13 @@ const ListingFormPage = () => {
       const hasStructuredAddress = l?.address && typeof l.address === 'object' && !Array.isArray(l.address);
       const nextAddress = hasStructuredAddress
         ? {
-            country: l.address.country || '',
+            country: BANGLADESH_COUNTRY,
             city: l.address.city || '',
             line1: l.address.line1 || '',
             formatted: l.address.formatted || '',
           }
         : {
-            country: '',
+            country: BANGLADESH_COUNTRY,
             city: '',
             line1: typeof l.address === 'string' ? l.address : '',
             formatted: typeof l.address === 'string' ? l.address : '',
@@ -119,12 +110,21 @@ const ListingFormPage = () => {
       setExistingPhotos(l.photos || []);
       if (l.location?.coordinates?.length === 2) {
         const [lng, lat] = l.location.coordinates;
-        setCoordinates({ lat, lng });
-        setMapCenter({ lat, lng });
-        setMapZoom(15);
-        setManualLat(String(lat));
-        setManualLng(String(lng));
-        setLocationConfirmed(true);
+        if (isWithinBangladesh(lat, lng)) {
+          setCoordinates({ lat, lng });
+          setMapCenter({ lat, lng });
+          setMapZoom(15);
+          setManualLat(String(lat));
+          setManualLng(String(lng));
+          setLocationConfirmed(true);
+        } else {
+          setLocationMessage('Existing map location is outside Bangladesh. Please pick a Bangladesh location.');
+          setLocationStatus('error');
+          setLocationConfirmed(false);
+          setCoordinates(null);
+          setMapCenter(DEFAULT_CENTER);
+          setMapZoom(13);
+        }
       }
     };
     load();
@@ -154,6 +154,12 @@ const ListingFormPage = () => {
       setLocationStatus('error');
       return;
     }
+    if (!isWithinBangladesh(lat, lng)) {
+      setLocationConfirmed(false);
+      setLocationMessage('RentEasy only supports Bangladesh locations. Choose a point inside Bangladesh.');
+      setLocationStatus('error');
+      return;
+    }
     setCoordinates({ lat, lng });
     setMapCenter({ lat, lng });
     setLocationConfirmed(true);
@@ -177,6 +183,8 @@ const ListingFormPage = () => {
     }
     if (needsFullAddress && !form.address.country?.trim()) {
       errors.country = 'Country is required.';
+    } else if (needsFullAddress && form.address.country?.trim().toLowerCase() !== 'bangladesh') {
+      errors.country = 'Only Bangladesh is allowed.';
     }
     if (needsFullAddress && !form.address.city?.trim()) {
       errors.city = 'City/Area is required.';
@@ -204,7 +212,7 @@ const ListingFormPage = () => {
 
   const onGeocode = async () => {
     if (!validateAddress({ requireFull: true })) {
-      toast.error('Add country, city/area, and street to search the map.');
+      toast.error('Add city/area and street to search inside Bangladesh.');
       return;
     }
     setGeocoding(true);
@@ -213,7 +221,7 @@ const ListingFormPage = () => {
     setLocationStatus('');
     try {
       const res = await api.post('/geocode', {
-        country: form.address.country.trim(),
+        country: BANGLADESH_COUNTRY,
         city: form.address.city.trim(),
         line1: form.address.line1.trim(),
       });
@@ -228,12 +236,12 @@ const ListingFormPage = () => {
         },
       }));
       setMapZoom(15);
-      applyCoordinates(lat, lng, 'Location pinned from OpenStreetMap.');
+      applyCoordinates(lat, lng, 'Bangladesh location pinned from OpenStreetMap.');
     } catch (err) {
       console.error(err);
-      setLocationMessage('Could not find this address. Refine your street or city.');
+      setLocationMessage('No Bangladesh match found. Refine your city/area or street.');
       setLocationStatus('error');
-      toast.error(err.response?.data?.message || "Couldn't find this address, refine your street/city.");
+      toast.error(err.response?.data?.message || "No Bangladesh match found. Refine your city/area or street.");
     } finally {
       setGeocoding(false);
     }
@@ -251,6 +259,11 @@ const ListingFormPage = () => {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
+        if (!isWithinBangladesh(next.lat, next.lng)) {
+          toast.error('Your current location is outside Bangladesh.');
+          setLocatingUser(false);
+          return;
+        }
         setUserLocation(next);
         setMapCenter(next);
         setMapZoom(15);
@@ -306,15 +319,20 @@ const ListingFormPage = () => {
       setLoading(false);
       return;
     }
-    if (!locationConfirmed || !coordinates || !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng))) {
-      setError('Please select a valid map location before saving.');
+    if (
+      !locationConfirmed ||
+      !coordinates ||
+      !isValidLatLng(Number(coordinates.lat), Number(coordinates.lng)) ||
+      !isWithinBangladesh(Number(coordinates.lat), Number(coordinates.lng))
+    ) {
+      setError('Please select a valid map location inside Bangladesh before saving.');
       setLoading(false);
       return;
     }
     const formattedAddress =
       form.address.formatted?.trim() || buildFullAddress(form.address);
     const addressPayload = {
-      country: form.address.country.trim(),
+      country: BANGLADESH_COUNTRY,
       city: form.address.city.trim(),
       line1: form.address.line1.trim(),
       formatted: formattedAddress,
@@ -455,7 +473,7 @@ const ListingFormPage = () => {
             <div>
               <div className="text-sm font-semibold text-slate-700">Address</div>
               <div className="text-xs text-slate-500">
-                Country helps avoid ambiguous locations like Mirpur10.
+                RentEasy supports Bangladesh only. Use City / Area for searchable location.
               </div>
             </div>
             {isLegacyAddress && (
@@ -469,13 +487,14 @@ const ListingFormPage = () => {
               <label className="text-sm font-semibold text-slate-700">Country</label>
               <input
                 type="text"
-                list="country-options"
-                value={form.address.country}
-                onChange={(e) => handleAddressChange('country', e.target.value)}
+                value={BANGLADESH_COUNTRY}
+                readOnly
                 className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:outline-none ${
-                  addressErrors.country ? 'border-red-500 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
+                  addressErrors.country
+                    ? 'border-red-500 bg-red-50 text-red-700'
+                    : 'border-slate-200 bg-slate-100 text-slate-600'
                 }`}
-                placeholder="Bangladesh"
+                placeholder={BANGLADESH_COUNTRY}
                 required={!isEdit || !isLegacyAddress}
               />
               {addressErrors.country && (
@@ -515,16 +534,11 @@ const ListingFormPage = () => {
               )}
             </div>
           </div>
-          {isLegacyAddress && (!form.address.country.trim() || !form.address.city.trim()) && (
+          {isLegacyAddress && !form.address.city.trim() && (
             <div className="mt-3 text-xs font-semibold text-amber-600">
-              This listing uses a legacy address. Please fill in the missing country/city for accurate geocoding.
+              This listing uses a legacy address. Please fill in the missing city/area for accurate geocoding.
             </div>
           )}
-          <datalist id="country-options">
-            {COUNTRY_OPTIONS.map((country) => (
-              <option key={country} value={country} />
-            ))}
-          </datalist>
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
@@ -566,7 +580,7 @@ const ListingFormPage = () => {
             <div>
               <div className="text-sm font-semibold text-slate-700">Map Location</div>
               <div className="text-xs text-slate-500">
-                Search an address or drop the pin to set the exact location.
+                Search an address or drop the pin inside Bangladesh.
               </div>
             </div>
             <button
@@ -606,7 +620,14 @@ const ListingFormPage = () => {
                 />
               </svg>
             </button>
-            <MapContainer center={[mapCenter.lat, mapCenter.lng]} zoom={mapZoom} className="h-full w-full">
+            <MapContainer
+              center={[mapCenter.lat, mapCenter.lng]}
+              zoom={mapZoom}
+              className="h-full w-full"
+              maxBounds={BANGLADESH_LEAFLET_BOUNDS}
+              maxBoundsViscosity={1}
+              minZoom={7}
+            >
               <MapRecenter center={mapCenter} zoom={mapZoom} />
               <MapClickHandler
                 onSelect={(latlng) => {

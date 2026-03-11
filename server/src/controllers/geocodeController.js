@@ -1,4 +1,5 @@
 const { normalizeAddress } = require('../utils/address');
+const { BANGLADESH_COUNTRY_NAME, isBangladeshCountry } = require('../utils/bangladeshGeo');
 const { geocodeLocationText } = require('../utils/geocode');
 
 exports.geocodeAddress = async (req, res) => {
@@ -7,15 +8,20 @@ exports.geocodeAddress = async (req, res) => {
     if (!normalized.country || !normalized.city || !normalized.line1) {
       return res.status(400).json({ message: 'Country, city/area, and street are required.' });
     }
-    const fullAddress = normalized.formatted;
-    const geo = await geocodeLocationText(fullAddress);
+    if (!isBangladeshCountry(normalized.country)) {
+      return res.status(400).json({ message: 'Only Bangladesh locations are supported.' });
+    }
+    const fullAddress = [normalized.line1, normalized.city, BANGLADESH_COUNTRY_NAME].filter(Boolean).join(', ');
+    const geo = await geocodeLocationText(fullAddress, { limit: 8 });
     if (!geo) {
-      return res.status(404).json({ message: "Couldn't find this address. Refine your street/city." });
+      return res
+        .status(404)
+        .json({ message: "No Bangladesh match found. Refine your city/area and street inside Bangladesh." });
     }
     return res.json({
       lat: geo.lat,
       lng: geo.lng,
-      formattedAddress: fullAddress,
+      formattedAddress: geo.formattedAddress || fullAddress,
     });
   } catch (err) {
     console.error('Geocode failed', err);

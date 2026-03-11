@@ -37,16 +37,18 @@ const seedLandlordSample = async () => {
 
   const demoListings = [
     {
-      title: 'Modern Apartment in Downtown',
-      description: 'Spacious 2 bed with skyline views.',
+      title: 'Modern Apartment in Gulshan',
+      description: 'Spacious 2 bed near Gulshan amenities.',
       rent: 1500,
       serviceCharge: 500,
       rentStartMonth: '2026-01',
       address: {
-        country: 'USA',
-        city: 'New York',
-        line1: 'Manhattan',
-        formatted: 'Manhattan, New York, USA',
+        country: 'Bangladesh',
+        countryNormalized: 'bangladesh',
+        city: 'Gulshan',
+        cityNormalized: 'gulshan',
+        line1: 'Road 55',
+        formatted: 'Road 55, Gulshan, Bangladesh',
       },
       roomType: 'Entire Place',
       beds: 2,
@@ -57,20 +59,22 @@ const seedLandlordSample = async () => {
       featured: true,
       location: {
         type: 'Point',
-        coordinates: [-73.9712, 40.7831],
+        coordinates: [90.4147, 23.7937],
       },
     },
     {
-      title: 'Cozy Studio Near Park',
-      description: 'Bright studio close to transit and park.',
+      title: 'Cozy Studio in Mirpur',
+      description: 'Bright studio close to local transport and shops.',
       rent: 1100,
       serviceCharge: 300,
       rentStartMonth: '2026-01',
       address: {
-        country: 'USA',
-        city: 'New York',
-        line1: 'Brooklyn',
-        formatted: 'Brooklyn, New York, USA',
+        country: 'Bangladesh',
+        countryNormalized: 'bangladesh',
+        city: 'Mirpur',
+        cityNormalized: 'mirpur',
+        line1: 'Section 10',
+        formatted: 'Section 10, Mirpur, Bangladesh',
       },
       roomType: 'Studio',
       beds: 1,
@@ -81,7 +85,7 @@ const seedLandlordSample = async () => {
       featured: true,
       location: {
         type: 'Point',
-        coordinates: [-73.9442, 40.6782],
+        coordinates: [90.3667, 23.8223],
       },
     },
   ];
